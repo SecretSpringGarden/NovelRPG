@@ -9,6 +9,7 @@
     "dev": "ts-node src/index.ts",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:models": "node test-model-comparison.js",
     "clean": "rimraf dist"
   },
   "keywords": ["rpg", "storytelling", "llm", "interactive", "novel"],
