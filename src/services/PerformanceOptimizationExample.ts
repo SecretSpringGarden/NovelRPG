@@ -143,18 +143,18 @@ export async function monitoredNovelAnalysis(novelPath: string) {
   try {
     // Upload novel with performance monitoring
     const fileId = await assistantService.uploadNovelFile(novelPath, (progress) => {
-      console.log(`Upload progress: ${progress.percentage.toFixed(1)}% - ${progress.currentStep}`);
+      console.log(`Upload progress: ${progress.overallProgress.toFixed(1)}% - ${progress.currentStep?.name || 'Processing'}`);
     });
 
     // Create assistant with performance monitoring
     const assistantId = await assistantService.createNovelAnalysisAssistant(fileId, (progress) => {
-      console.log(`Assistant creation progress: ${progress.percentage.toFixed(1)}% - ${progress.currentStep}`);
+      console.log(`Assistant creation progress: ${progress.overallProgress.toFixed(1)}% - ${progress.currentStep?.name || 'Processing'}`);
     });
 
     // Perform queries with performance monitoring
     const characterQuery = "Extract the main characters from this novel, including their names, descriptions, and importance rankings.";
     const characters = await assistantService.queryAssistant(assistantId, characterQuery, (progress) => {
-      console.log(`Query progress: ${progress.percentage.toFixed(1)}% - ${progress.currentStep}`);
+      console.log(`Query progress: ${progress.overallProgress.toFixed(1)}% - ${progress.currentStep?.name || 'Processing'}`);
     });
 
     console.log('✅ Analysis completed successfully');
