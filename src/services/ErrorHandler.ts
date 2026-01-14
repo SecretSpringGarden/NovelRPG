@@ -194,18 +194,25 @@ export class ErrorHandler {
   private logError(errorDetails: ErrorDetails): void {
     this.errorLog.push(errorDetails);
     
-    // Log to console with appropriate level
-    const logMessage = `[${errorDetails.code}] ${errorDetails.operation}: ${errorDetails.message}`;
+    // Log to console with appropriate level and detailed information
+    const timestamp = errorDetails.timestamp.toISOString();
+    const logMessage = `[${timestamp}] [${errorDetails.code}] ${errorDetails.operation}: ${errorDetails.message}`;
     
     if (errorDetails.retryable) {
       console.warn(`⚠️  ${logMessage}`);
       if (errorDetails.guidance) {
-        console.warn(`💡 ${errorDetails.guidance}`);
+        console.warn(`💡 Guidance: ${errorDetails.guidance}`);
+      }
+      if (errorDetails.context && Object.keys(errorDetails.context).length > 0) {
+        console.warn(`📋 Context:`, JSON.stringify(errorDetails.context, null, 2));
       }
     } else {
       console.error(`❌ ${logMessage}`);
       if (errorDetails.guidance) {
-        console.error(`💡 ${errorDetails.guidance}`);
+        console.error(`💡 Guidance: ${errorDetails.guidance}`);
+      }
+      if (errorDetails.context && Object.keys(errorDetails.context).length > 0) {
+        console.error(`📋 Context:`, JSON.stringify(errorDetails.context, null, 2));
       }
     }
 
@@ -225,6 +232,84 @@ export class ErrorHandler {
 
   public clearErrorLog(): void {
     this.errorLog = [];
+  }
+
+  public getErrorStatistics(): {
+    totalErrors: number;
+    errorsByCode: Record<string, number>;
+    errorsByOperation: Record<string, number>;
+    retryableErrors: number;
+    nonRetryableErrors: number;
+    recentErrorRate: number;
+  } {
+    const stats = {
+      totalErrors: this.errorLog.length,
+      errorsByCode: {} as Record<string, number>,
+      errorsByOperation: {} as Record<string, number>,
+      retryableErrors: 0,
+      nonRetryableErrors: 0,
+      recentErrorRate: 0
+    };
+
+    // Count errors by code and operation
+    this.errorLog.forEach(error => {
+      stats.errorsByCode[error.code] = (stats.errorsByCode[error.code] || 0) + 1;
+      stats.errorsByOperation[error.operation] = (stats.errorsByOperation[error.operation] || 0) + 1;
+      
+      if (error.retryable) {
+        stats.retryableErrors++;
+      } else {
+        stats.nonRetryableErrors++;
+      }
+    });
+
+    // Calculate recent error rate (errors in last 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const recentErrors = this.errorLog.filter(error => error.timestamp > fiveMinutesAgo);
+    stats.recentErrorRate = recentErrors.length / 5; // Errors per minute
+
+    return stats;
+  }
+
+  public getErrorSummary(): string {
+    const stats = this.getErrorStatistics();
+    
+    if (stats.totalErrors === 0) {
+      return '✅ No errors recorded';
+    }
+
+    const lines = [
+      `📊 Error Summary:`,
+      `   Total Errors: ${stats.totalErrors}`,
+      `   Retryable: ${stats.retryableErrors}`,
+      `   Non-Retryable: ${stats.nonRetryableErrors}`,
+      `   Recent Error Rate: ${stats.recentErrorRate.toFixed(2)} errors/minute`,
+      ``,
+      `   Top Error Codes:`
+    ];
+
+    // Sort error codes by frequency
+    const sortedCodes = Object.entries(stats.errorsByCode)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5);
+
+    sortedCodes.forEach(([code, count]) => {
+      lines.push(`      ${code}: ${count}`);
+    });
+
+    lines.push(``);
+    lines.push(`   Top Operations:`);
+
+    // Sort operations by frequency
+    const sortedOps = Object.entries(stats.errorsByOperation)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5);
+
+    sortedOps.forEach(([op, count]) => {
+      lines.push(`      ${op}: ${count}`);
+    });
+
+    return lines.join('\n');
   }
 }
 
@@ -323,6 +408,100 @@ export class UsageMonitor {
     };
     this.updateQuotaStatus();
   }
+
+  public getUsageSummary(): string {
+    const lines = [
+      `📊 Usage Metrics Summary:`,
+      `   Files Uploaded: ${this.metrics.filesUploaded}`,
+      `   Total Storage: ${(this.metrics.totalStorageUsed / (1024 * 1024)).toFixed(2)} MB`,
+      `   Queries Executed: ${this.metrics.queriesExecuted}`,
+      `   Estimated Cost: $${this.metrics.estimatedCost.toFixed(4)}`,
+      `   Last Updated: ${this.metrics.lastUpdated.toISOString()}`,
+      ``,
+      `📈 Quota Status:`,
+      `   Current Usage: ${this.quotaStatus.currentUsage} / ${this.quotaStatus.limit}`,
+      `   Percentage Used: ${this.quotaStatus.percentageUsed.toFixed(1)}%`
+    ];
+
+    if (this.quotaStatus.percentageUsed >= this.quotaStatus.alertThreshold) {
+      lines.push(`   Status: 🚨 ALERT - Near quota limit!`);
+    } else if (this.quotaStatus.percentageUsed >= this.quotaStatus.warningThreshold) {
+      lines.push(`   Status: ⚠️  WARNING - Approaching quota limit`);
+    } else {
+      lines.push(`   Status: ✅ Normal`);
+    }
+
+    return lines.join('\n');
+  }
+
+  public getCostProjection(daysAhead: number = 30): {
+    projectedCost: number;
+    projectedQueries: number;
+    projectedStorage: number;
+    recommendation: string;
+  } {
+    // Calculate daily averages
+    const daysSinceStart = 1; // Simplified - in real implementation would track actual time
+    const dailyQueries = this.metrics.queriesExecuted / daysSinceStart;
+    const dailyCost = this.metrics.estimatedCost / daysSinceStart;
+    const dailyStorage = this.metrics.totalStorageUsed / daysSinceStart;
+
+    const projectedQueries = dailyQueries * daysAhead;
+    const projectedCost = dailyCost * daysAhead;
+    const projectedStorage = dailyStorage * daysAhead;
+
+    let recommendation = '';
+    if (projectedCost > 100) {
+      recommendation = 'High cost projection. Consider optimizing query frequency or using smaller models.';
+    } else if (projectedCost > 50) {
+      recommendation = 'Moderate cost projection. Monitor usage and consider optimization strategies.';
+    } else {
+      recommendation = 'Cost projection is within reasonable limits.';
+    }
+
+    return {
+      projectedCost,
+      projectedQueries,
+      projectedStorage,
+      recommendation
+    };
+  }
+
+  public shouldWarnAdministrator(): boolean {
+    return this.quotaStatus.percentageUsed >= this.quotaStatus.warningThreshold;
+  }
+
+  public getAdministratorWarning(): string | null {
+    if (!this.shouldWarnAdministrator()) {
+      return null;
+    }
+
+    const projection = this.getCostProjection(30);
+    
+    const lines = [
+      `⚠️  ADMINISTRATOR WARNING`,
+      ``,
+      `Current usage is at ${this.quotaStatus.percentageUsed.toFixed(1)}% of quota limit.`,
+      ``,
+      `Current Metrics:`,
+      `  - Queries: ${this.metrics.queriesExecuted}`,
+      `  - Cost: $${this.metrics.estimatedCost.toFixed(4)}`,
+      ``,
+      `30-Day Projection:`,
+      `  - Queries: ${projection.projectedQueries.toFixed(0)}`,
+      `  - Cost: $${projection.projectedCost.toFixed(2)}`,
+      ``,
+      `Recommendation: ${projection.recommendation}`,
+      ``,
+      `Actions to consider:`,
+      `  1. Review and optimize query patterns`,
+      `  2. Implement caching for repeated queries`,
+      `  3. Consider upgrading quota limits`,
+      `  4. Enable fallback processing for non-critical operations`
+    ];
+
+    return lines.join('\n');
+  }
 }
 
 export class DiagnosticService {
@@ -334,6 +513,8 @@ export class DiagnosticService {
 
   public async runDiagnostics(): Promise<DiagnosticResult[]> {
     const results: DiagnosticResult[] = [];
+
+    console.log('🔍 Running Assistant API diagnostics...\n');
 
     // Test 1: Configuration validation
     results.push(await this.testConfiguration());
@@ -347,7 +528,44 @@ export class DiagnosticService {
     // Test 4: File upload capability
     results.push(await this.testFileUploadCapability());
 
+    // Test 5: Assistant creation capability
+    results.push(await this.testAssistantCreationCapability());
+
+    // Test 6: Vector store capability
+    results.push(await this.testVectorStoreCapability());
+
+    // Print summary
+    this.printDiagnosticSummary(results);
+
     return results;
+  }
+
+  private printDiagnosticSummary(results: DiagnosticResult[]): void {
+    console.log('\n📊 Diagnostic Summary:');
+    console.log('═══════════════════════════════════════\n');
+
+    const passed = results.filter(r => r.status === 'pass').length;
+    const failed = results.filter(r => r.status === 'fail').length;
+    const warnings = results.filter(r => r.status === 'warning').length;
+
+    results.forEach(result => {
+      const icon = result.status === 'pass' ? '✅' : result.status === 'fail' ? '❌' : '⚠️';
+      console.log(`${icon} ${result.test}: ${result.message}`);
+      if (result.details) {
+        console.log(`   Details:`, JSON.stringify(result.details, null, 2));
+      }
+    });
+
+    console.log('\n═══════════════════════════════════════');
+    console.log(`Total: ${results.length} | Passed: ${passed} | Failed: ${failed} | Warnings: ${warnings}`);
+    
+    if (failed > 0) {
+      console.log('\n❌ Some diagnostics failed. Please review the errors above.');
+    } else if (warnings > 0) {
+      console.log('\n⚠️  All critical tests passed, but there are warnings to review.');
+    } else {
+      console.log('\n✅ All diagnostics passed successfully!');
+    }
   }
 
   private async testConfiguration(): Promise<DiagnosticResult> {
@@ -563,6 +781,149 @@ export class DiagnosticService {
         test: 'File Upload Capability',
         status: 'fail',
         message: `File upload test error: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
+  private async testAssistantCreationCapability(): Promise<DiagnosticResult> {
+    try {
+      if (!this.config?.apiKey || !this.config?.model) {
+        return {
+          test: 'Assistant Creation Capability',
+          status: 'fail',
+          message: 'Cannot test assistant creation without API key and model'
+        };
+      }
+
+      // Try to create a minimal assistant
+      const response = await fetch('https://api.openai.com/v1/assistants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'OpenAI-Beta': 'assistants=v2'
+        },
+        body: JSON.stringify({
+          name: 'Diagnostic Test Assistant',
+          description: 'Temporary assistant for diagnostic testing',
+          model: this.config.model,
+          instructions: 'This is a test assistant.'
+        })
+      });
+
+      if (response.ok) {
+        const assistant = await response.json() as { id: string };
+        
+        // Clean up the test assistant
+        try {
+          await fetch(`https://api.openai.com/v1/assistants/${assistant.id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'OpenAI-Beta': 'assistants=v2'
+            }
+          });
+        } catch (cleanupError) {
+          // Ignore cleanup errors
+        }
+
+        return {
+          test: 'Assistant Creation Capability',
+          status: 'pass',
+          message: 'Assistant creation is working correctly',
+          details: {
+            assistantId: assistant.id,
+            model: this.config.model
+          }
+        };
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          test: 'Assistant Creation Capability',
+          status: 'fail',
+          message: `Assistant creation failed with status ${response.status}`,
+          details: {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData
+          }
+        };
+      }
+    } catch (error) {
+      return {
+        test: 'Assistant Creation Capability',
+        status: 'fail',
+        message: `Assistant creation test error: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
+  private async testVectorStoreCapability(): Promise<DiagnosticResult> {
+    try {
+      if (!this.config?.apiKey) {
+        return {
+          test: 'Vector Store Capability',
+          status: 'fail',
+          message: 'Cannot test vector store without API key'
+        };
+      }
+
+      // Try to create a minimal vector store
+      const response = await fetch('https://api.openai.com/v1/vector_stores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'OpenAI-Beta': 'assistants=v2'
+        },
+        body: JSON.stringify({
+          name: 'Diagnostic Test Vector Store'
+        })
+      });
+
+      if (response.ok) {
+        const vectorStore = await response.json() as { id: string; status: string };
+        
+        // Clean up the test vector store
+        try {
+          await fetch(`https://api.openai.com/v1/vector_stores/${vectorStore.id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'OpenAI-Beta': 'assistants=v2'
+            }
+          });
+        } catch (cleanupError) {
+          // Ignore cleanup errors
+        }
+
+        return {
+          test: 'Vector Store Capability',
+          status: 'pass',
+          message: 'Vector store creation is working correctly',
+          details: {
+            vectorStoreId: vectorStore.id,
+            status: vectorStore.status
+          }
+        };
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          test: 'Vector Store Capability',
+          status: 'fail',
+          message: `Vector store creation failed with status ${response.status}`,
+          details: {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData
+          }
+        };
+      }
+    } catch (error) {
+      return {
+        test: 'Vector Store Capability',
+        status: 'fail',
+        message: `Vector store test error: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   }
