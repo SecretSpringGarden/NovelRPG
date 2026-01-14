@@ -568,13 +568,28 @@ Requirements:
 
   /**
    * Cleanup method to remove assistant and file resources
+   * This method is idempotent and safe to call multiple times
+   * Requirement 7.1, 7.2, 7.4: Public cleanup method that is idempotent
    */
   async cleanup(): Promise<void> {
     if (this.currentAssistantId || this.currentFileId) {
       console.log('🧹 Cleaning up Assistant API resources...');
-      await this.assistantService.cleanup(this.currentAssistantId, this.currentFileId);
-      this.currentAssistantId = undefined;
-      this.currentFileId = undefined;
+      console.log(`   Assistant ID: ${this.currentAssistantId || 'none'}`);
+      console.log(`   File ID: ${this.currentFileId || 'none'}`);
+      
+      try {
+        await this.assistantService.cleanup(this.currentAssistantId, this.currentFileId);
+        console.log('✅ Resources cleaned up successfully');
+      } catch (error) {
+        console.warn('⚠️  Cleanup warning:', error);
+        // Don't throw - cleanup errors shouldn't fail the test run
+      } finally {
+        // Always clear state, even if cleanup fails
+        this.currentAssistantId = undefined;
+        this.currentFileId = undefined;
+      }
+    } else {
+      console.log('ℹ️  No resources to cleanup (already cleaned or never created)');
     }
   }
 

@@ -97,9 +97,22 @@ export class GameManager {
 
   /**
    * Starts a new game session with the provided parameters
-   * Validates input, analyzes novel, and initializes game state
+   * Validates input, analyzes novel (or uses pre-analyzed data), and initializes game state
+   * 
+   * @param novelFile Path to the novel file
+   * @param humanPlayers Number of human players (0-4)
+   * @param rounds Number of game rounds (10-20)
+   * @param allowZeroHumans Allow zero human players for testing mode
+   * @param preAnalyzedNovel Optional pre-analyzed novel data to skip analysis phase
+   * @returns GameSession object representing the active game
    */
-  async startGame(novelFile: string, humanPlayers: number, rounds: number, allowZeroHumans: boolean = false): Promise<GameSession> {
+  async startGame(
+    novelFile: string, 
+    humanPlayers: number, 
+    rounds: number, 
+    allowZeroHumans: boolean = false,
+    preAnalyzedNovel?: NovelAnalysis
+  ): Promise<GameSession> {
     try {
       // Phase 1: Input validation
       this.currentPhase = GamePhase.INITIALIZATION;
@@ -108,15 +121,29 @@ export class GameManager {
         throw new Error(`Input validation failed: ${validation.errors.join(', ')}`);
       }
 
-      // Phase 2: Novel analysis
+      // Phase 2: Novel analysis (skip if pre-analyzed data provided)
       this.currentPhase = GamePhase.NOVEL_ANALYSIS;
-      const novelText = fs.readFileSync(novelFile, 'utf-8');
-      const novelAnalysis = await this.novelAnalyzer.analyzeNovel(novelText);
+      let novelAnalysis: NovelAnalysis;
       
-      // Validate analysis completeness
-      if (!this.validateNovelAnalysis(novelAnalysis)) {
-        this.terminateGameEarly('Novel analysis failed to produce required elements');
-        throw new Error('Novel analysis incomplete - game terminated');
+      if (preAnalyzedNovel) {
+        console.log('📚 Using pre-analyzed novel data (skipping analysis)');
+        console.log('   ✅ Reusing existing assistant and analysis results');
+        novelAnalysis = preAnalyzedNovel;
+        
+        // Validate pre-analyzed data
+        if (!this.validateNovelAnalysis(novelAnalysis)) {
+          throw new Error('Pre-analyzed novel data is invalid or incomplete');
+        }
+      } else {
+        console.log('📖 Analyzing novel...');
+        const novelText = fs.readFileSync(novelFile, 'utf-8');
+        novelAnalysis = await this.novelAnalyzer.analyzeNovel(novelText);
+        
+        // Validate analysis completeness
+        if (!this.validateNovelAnalysis(novelAnalysis)) {
+          this.terminateGameEarly('Novel analysis failed to produce required elements');
+          throw new Error('Novel analysis incomplete - game terminated');
+        }
       }
 
       // Phase 3: Character selection setup

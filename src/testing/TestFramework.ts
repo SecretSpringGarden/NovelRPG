@@ -66,6 +66,7 @@ export class TestFramework {
    * Runs automated tests for a novel file
    * Implements Requirements 7.1: Generate games with all computer players
    * Implements Requirements 7.2: Create games for round counts from 10 to 20, incrementing by 2
+   * OPTIMIZED: Analyzes novel once and reuses assistant across all games
    */
   async runAutomatedTests(novelFile: string): Promise<TestReport> {
     console.log(`🚀 Running automated cohesion tests for: ${path.basename(novelFile)}`);
@@ -79,11 +80,23 @@ export class TestFramework {
     const gameResults: GameResult[] = [];
     let completedGames = 0;
     const totalGames = this.testConfiguration.roundCounts.length;
+    
+    // Create NovelAnalyzer instance for resource management
+    const { createNovelAnalyzer } = require('../services');
+    const novelAnalyzer = createNovelAnalyzer();
+    let novelAnalysis: any = undefined;
 
     try {
+      // OPTIMIZATION: Analyze novel ONCE before all games
+      console.log('\n📖 Analyzing novel (this will be reused for all games)...');
+      const novelText = fs.readFileSync(novelFile, 'utf-8');
+      novelAnalysis = await novelAnalyzer.analyzeNovel(novelText);
+      console.log('✅ Novel analysis complete - will be reused for all games');
+      console.log(`   📊 Found ${novelAnalysis.mainCharacters.length} characters, ${novelAnalysis.plotPoints.length} plot points`);
+      
       // Run games for each round count configuration
       for (const roundCount of this.testConfiguration.roundCounts) {
-        console.log(`\n🎮 Running game with ${roundCount} rounds...`);
+        console.log(`\n🎮 Running game ${completedGames + 1}/${totalGames} with ${roundCount} rounds...`);
         
         // Add delay between games to respect rate limits
         if (completedGames > 0) {
@@ -99,13 +112,14 @@ export class TestFramework {
           throw new Error(errorMsg);
         }
 
-        // Start game with all computer players (Requirement 7.1)
-        console.log('📖 Starting novel analysis and game setup...');
+        // Start game with pre-analyzed novel data (OPTIMIZATION: skip analysis)
+        console.log('🎲 Starting game with pre-analyzed data (skipping novel analysis)...');
         const gameSession = await this.gameManager.startGame(
           novelFile,
           0, // 0 human players = all computer players
           roundCount,
-          true // Allow zero human players for testing mode
+          true, // Allow zero human players for testing mode
+          novelAnalysis // Pass pre-analyzed data to skip analysis
         );
 
         // Add delay after game setup to respect rate limits
@@ -161,6 +175,18 @@ export class TestFramework {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Automated testing failed:', errorMessage);
       throw error;
+    } finally {
+      // OPTIMIZATION: Cleanup resources after all games complete
+      if (novelAnalyzer) {
+        console.log('\n🧹 Cleaning up novel analysis resources...');
+        try {
+          await novelAnalyzer.cleanup();
+          console.log('✅ Cleanup complete');
+        } catch (cleanupError) {
+          console.warn('⚠️  Cleanup warning:', cleanupError);
+          // Don't fail the test run due to cleanup errors
+        }
+      }
     }
   }
 
