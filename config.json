@@ -1,0 +1,43 @@
+{
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4-turbo-preview",
+    "apiKey": "${OPENAI_API_KEY}",
+    "maxTokens": 1000,
+    "temperature": 0.7,
+    "timeout": 30000
+  },
+  "game": {
+    "defaultRounds": 15,
+    "maxPlayers": 4,
+    "turnTimeoutSeconds": 60,
+    "gameStateDirectory": "./game_states",
+    "maxNovelSizeMB": 50
+  },
+  "testing": {
+    "outputDirectory": "./test_outputs",
+    "cohesionAnalysisModel": "gpt-4-turbo-preview",
+    "testIterations": 6
+  },
+  "assistantAPI": {
+    "enabled": true,
+    "model": "gpt-4-turbo-preview",
+    "maxFileSize": 100,
+    "vectorStoreExpiration": 7,
+    "autoCleanup": true,
+    "usageThreshold": 1000
+  },
+  "fallback": {
+    "enableFallback": false,
+    "chunkSize": 4000,
+    "maxChunks": 10,
+    "truncationLimit": 40000,
+    "retryAttempts": 3
+  },
+  "resourceManagement": {
+    "cleanupInterval": 60,
+    "maxOrphanedResources": 50,
+    "costAlertThreshold": 100,
+    "monitoringEnabled": true
+  }
+}
