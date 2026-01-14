@@ -42,6 +42,14 @@ coverage/
 # Game state files
 game_states/
 test_outputs/
+test_states/
+
+# Test novels (large files)
+TestNovels/
+
+# Test output files
+test_output.txt
+test_simple_novel.txt
 
 # Temporary files
 tmp/
