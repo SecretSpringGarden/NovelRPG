@@ -1,13 +1,19 @@
+// Core LLM and Assistant API Services
 export { LLMService, OpenAILLMService, createLLMService, LLMResponse } from './LLMService';
 export { AssistantService, OpenAIAssistantService, createAssistantService } from './AssistantService';
+
+// RAG Infrastructure Services
 export { VectorStoreManager, OpenAIVectorStoreManager, createVectorStoreManager, VectorStoreStatus } from './VectorStoreManager';
 export { ResourceCleanupManager, OpenAIResourceCleanupManager, createResourceCleanupManager, ResourceIdentifiers, CleanupResult, OrphanedResource, AssistantSession } from './ResourceCleanupManager';
-export { FallbackHandler, DefaultFallbackHandler, createFallbackHandler, AssistantAPIError, FallbackExhaustedException } from './FallbackHandler';
+
+// Reliability and Monitoring Services
 export { RetryManager, createRetryManager, RetryConfig, QueuedRequest, RetryProgressCallback } from './RetryManager';
 export { ProgressTracker, createProgressTracker, ProgressStep, ProgressState, globalProgressTracker } from './ProgressTracker';
-export { ErrorHandler, UsageMonitor, DiagnosticService, AssistantAPIError as ErrorHandlerAssistantAPIError, ErrorDetails, UsageMetrics, QuotaStatus, DiagnosticResult } from './ErrorHandler';
+export { ErrorHandler, UsageMonitor, DiagnosticService, AssistantAPIError, ErrorDetails, UsageMetrics, QuotaStatus, DiagnosticResult } from './ErrorHandler';
 export { PerformanceMonitor, createPerformanceMonitor, PerformanceMetrics, OptimizationRecommendation, PerformanceReport, CostAnalysis } from './PerformanceMonitor';
 export { DeploymentManager, createDeploymentManager, DeploymentValidationResult, HealthCheckResult, ConfigurationValidationResult, MonitoringAlert, AlertingConfig } from './DeploymentManager';
+
+// Novel Analysis and Game Services
 export { NovelAnalyzer, DefaultNovelAnalyzer, createNovelAnalyzer } from './NovelAnalyzer';
 export { StoryGenerator, DefaultStoryGenerator, createStoryGenerator, GameContext } from './StoryGenerator';
 export { PlayerSystem, HumanPlayer, ComputerPlayer } from './PlayerSystem';

@@ -39,8 +39,9 @@ export class DefaultNovelAnalyzer implements NovelAnalyzer {
   }
 
   /**
-   * Performs complete novel analysis using Assistant API as the only processing method
-   * Uses Assistant API for all novels to eliminate token limits through RAG capabilities
+   * Performs complete novel analysis using Assistant API with RAG
+   * This is the ONLY processing method - no fallback to direct LLM
+   * Uses OpenAI's Assistants API with file search to eliminate token limits
    * Requirement 2.1: Assistant API as primary processing method
    * Requirement 2.6: Maintain same output format regardless of processing method
    * Requirement 8.2: Focus on Assistant API reliability

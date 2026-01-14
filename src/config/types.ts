@@ -28,9 +28,14 @@ export interface AssistantAPIConfig {
   maxFileSize: number; // in MB
   vectorStoreExpiration: number; // in days
   autoCleanup: boolean;
-  usageThreshold: number; // switch to fallback after this many queries
+  usageThreshold: number; // monitoring threshold for usage tracking
 }
 
+/**
+ * @deprecated FallbackConfig is no longer used in RAG-only architecture
+ * This interface is kept for backward compatibility but has no effect
+ * The system now uses Assistant API exclusively without fallback
+ */
 export interface FallbackConfig {
   enableFallback: boolean;
   chunkSize: number;

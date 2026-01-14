@@ -120,11 +120,11 @@ describe('Assistant API Integration Tests', () => {
     it('should use Assistant API as the only processing method', async () => {
       const novelText = fs.readFileSync(testNovelPath, 'utf8');
       
-      // Test that the analyzer only uses Assistant API (no fallback methods)
+      // Test that the analyzer uses RAG-only approach with Assistant API
       expect(typeof novelAnalyzer.analyzeNovel).toBe('function');
       expect(typeof novelAnalyzer.analyzeNovelWithAssistant).toBe('function');
       
-      // Verify that fallback methods are not available
+      // Verify that direct LLM methods are not available (RAG-only architecture)
       expect((novelAnalyzer as any).fallbackToDirectLLM).toBeUndefined();
     });
   });
