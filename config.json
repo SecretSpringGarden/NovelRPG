@@ -1,7 +1,7 @@
 {
   "llm": {
     "provider": "openai",
-    "model": "gpt-4-turbo-preview",
+    "model": "gpt-4o-mini",
     "apiKey": "${OPENAI_API_KEY}",
     "maxTokens": 1000,
     "temperature": 0.7,
@@ -16,12 +16,12 @@
   },
   "testing": {
     "outputDirectory": "./test_outputs",
-    "cohesionAnalysisModel": "gpt-4-turbo-preview",
+    "cohesionAnalysisModel": "gpt-4o-mini",
     "testIterations": 6
   },
   "assistantAPI": {
     "enabled": true,
-    "model": "gpt-4-turbo-preview",
+    "model": "gpt-4o-mini",
     "maxFileSize": 100,
     "vectorStoreExpiration": 7,
     "autoCleanup": true,
