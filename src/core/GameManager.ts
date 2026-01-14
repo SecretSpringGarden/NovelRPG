@@ -329,6 +329,12 @@ export class GameManager {
 
     const gameState = this.currentSession.gameState;
     
+    // Find the player taking this action
+    const actingPlayer = gameState.players.find(p => p.id === playerId);
+    if (!actingPlayer) {
+      throw new Error(`Player with id ${playerId} not found in game state`);
+    }
+    
     // Handle "do nothing" action - increment rounds
     if (action.type === 'nothing') {
       const updatedGameState = this.gameFlowManager.handleDoNothingAction(gameState, action);
@@ -344,8 +350,9 @@ export class GameManager {
       this.gameStateManager.saveGameEvent(roundEvent);
       
       // Create empty story segment for "do nothing"
+      const characterName = actingPlayer.character?.name || `Player ${playerId}`;
       const storySegment: StorySegment = {
-        content: `${this.getPlayerName(playerId)} chose to do nothing. Total rounds increased to ${updatedGameState.totalRounds}.`,
+        content: `${characterName} chose to do nothing. Total rounds increased to ${updatedGameState.totalRounds}.`,
         wordCount: 0,
         generatedBy: action,
         targetEnding: gameState.targetEnding?.id || 'none',
@@ -364,7 +371,8 @@ export class GameManager {
       totalRounds: gameState.totalRounds,
       players: gameState.players,
       storySegments: gameState.storySegments,
-      targetEnding: gameState.targetEnding
+      targetEnding: gameState.targetEnding,
+      actingCharacter: actingPlayer.character // Pass the character assigned to this player
     };
 
     let content: string;

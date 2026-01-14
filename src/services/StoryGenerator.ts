@@ -21,6 +21,7 @@ export interface GameContext {
   players: any[]; // Player array
   storySegments: StorySegment[];
   targetEnding?: StoryEnding;
+  actingCharacter?: any; // The character assigned to the player taking this action
 }
 
 /**
@@ -275,7 +276,17 @@ Generate a creative, unexpected story ending that uses the established character
       `Target ending: ${context.targetEnding.description}` : 
       'No specific target ending set';
 
-    return `Generate approximately ${wordCount} words of dialogue between characters in this interactive story.
+    // Identify the speaking character
+    const speakingCharacter = context.actingCharacter;
+    const speakingCharacterInfo = speakingCharacter ? 
+      `${speakingCharacter.name} - ${speakingCharacter.description}` : 
+      'Unknown character';
+
+    return `Generate approximately ${wordCount} words of dialogue for the character ${speakingCharacter?.name || 'Unknown'} in this interactive story.
+
+IMPORTANT: The dialogue MUST be spoken by ${speakingCharacter?.name || 'Unknown'} in their persona and voice. This character is taking the "talk" action.
+
+Character speaking: ${speakingCharacterInfo}
 
 Story Context:
 - Novel: Based on analysis of ${context.novelAnalysis.mainCharacters.map(c => c.name).join(', ')}
@@ -285,16 +296,18 @@ Story Context:
 Recent story segments:
 ${recentSegments.map(s => s.content).join('\n\n')}
 
-Characters available: ${context.novelAnalysis.mainCharacters.map(c => `${c.name} - ${c.description}`).join('; ')}
+All characters in the story: ${context.novelAnalysis.mainCharacters.map(c => `${c.name} - ${c.description}`).join('; ')}
 
 Generate dialogue that:
-1. Advances the story toward the target ending (if set)
-2. Feels natural for these characters
-3. Builds on recent story events
-4. Is approximately ${wordCount} words
-5. Uses proper dialogue formatting with character names
+1. Is spoken BY ${speakingCharacter?.name || 'Unknown'} (the character taking this action)
+2. Stays true to ${speakingCharacter?.name || 'Unknown'}'s personality and voice as described: "${speakingCharacter?.description || 'Unknown'}"
+3. May involve other characters responding, but ${speakingCharacter?.name || 'Unknown'} should be the primary speaker
+4. Advances the story toward the target ending (if set)
+5. Builds on recent story events
+6. Is approximately ${wordCount} words
+7. Uses proper dialogue formatting with character names
 
-Focus on character interaction and development through conversation.`;
+Focus on ${speakingCharacter?.name || 'Unknown'}'s character development and interaction with others through their dialogue.`;
   }
 
   private buildNarrativePrompt(context: GameContext, wordCount: number): string {
@@ -303,7 +316,17 @@ Focus on character interaction and development through conversation.`;
       `Target ending: ${context.targetEnding.description}` : 
       'No specific target ending set';
 
-    return `Generate approximately ${wordCount} words of narrative action for this interactive story.
+    // Identify the acting character
+    const actingCharacter = context.actingCharacter;
+    const actingCharacterInfo = actingCharacter ? 
+      `${actingCharacter.name} - ${actingCharacter.description}` : 
+      'Unknown character';
+
+    return `Generate approximately ${wordCount} words of narrative action for the character ${actingCharacter?.name || 'Unknown'} in this interactive story.
+
+IMPORTANT: The action MUST be performed by ${actingCharacter?.name || 'Unknown'}. This character is taking the "act" action.
+
+Character acting: ${actingCharacterInfo}
 
 Story Context:
 - Novel: Based on analysis of ${context.novelAnalysis.mainCharacters.map(c => c.name).join(', ')}
@@ -313,16 +336,18 @@ Story Context:
 Recent story segments:
 ${recentSegments.map(s => s.content).join('\n\n')}
 
-Characters available: ${context.novelAnalysis.mainCharacters.map(c => `${c.name} - ${c.description}`).join('; ')}
+All characters in the story: ${context.novelAnalysis.mainCharacters.map(c => `${c.name} - ${c.description}`).join('; ')}
 
 Generate narrative that:
-1. Describes action, events, or developments
-2. Advances the story toward the target ending (if set)
-3. Builds on recent story events
-4. Is approximately ${wordCount} words
-5. Uses vivid, engaging prose
+1. Describes action performed BY ${actingCharacter?.name || 'Unknown'} (the character taking this action)
+2. Stays true to ${actingCharacter?.name || 'Unknown'}'s personality and capabilities as described: "${actingCharacter?.description || 'Unknown'}"
+3. May involve other characters reacting, but ${actingCharacter?.name || 'Unknown'} should be the primary actor
+4. Advances the story toward the target ending (if set)
+5. Builds on recent story events
+6. Is approximately ${wordCount} words
+7. Uses vivid, engaging prose
 
-Focus on plot advancement and dramatic action rather than dialogue.`;
+Focus on ${actingCharacter?.name || 'Unknown'}'s actions and their impact on the story.`;
   }
 
   private countWords(text: string): number {
