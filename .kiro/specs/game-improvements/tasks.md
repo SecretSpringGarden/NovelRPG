@@ -38,42 +38,42 @@ This implementation plan breaks down the game improvements into discrete, manage
     - Test that character names appear in outputs when assigned
     - Test that only player ID appears when no character assigned
 
-- [ ] 2. Phase 2: Book Quote Extraction System
-  - [ ] 2.1 Create BookQuoteExtractor component
+- [x] 2. Phase 2: Book Quote Extraction System
+  - [x] 2.1 Create BookQuoteExtractor component
     - Create `src/services/BookQuoteExtractor.ts` with interface
     - Implement basic structure and constructor
     - _Requirements: 12.4_
   
-  - [ ] 2.2 Implement character dialogue extraction
+  - [x] 2.2 Implement character dialogue extraction
     - Add `extractCharacterDialogue()` method
     - Use regex and text processing to find character dialogue
     - Cache extracted quotes for performance
     - _Requirements: 12.2, 12.4_
   
-  - [ ] 2.3 Implement character action extraction
+  - [x] 2.3 Implement character action extraction
     - Add `extractCharacterActions()` method
     - Extract narrative descriptions of character actions
     - _Requirements: 12.3, 12.4_
   
-  - [ ] 2.4 Implement dialogue context identification
+  - [x] 2.4 Implement dialogue context identification
     - Add `findDialogueContext()` method
     - Identify book sections based on round progression
     - Return context with chapter/scene information
     - _Requirements: 13.1, 13.5_
   
-  - [ ] 2.5 Implement quote validation
+  - [x] 2.5 Implement quote validation
     - Add `validateQuoteForCharacter()` method
     - Verify quote appears in source novel
     - Verify quote is associated with correct character
     - _Requirements: 12.4_
   
-  - [ ] 2.6 Implement ending compatibility checking
+  - [x] 2.6 Implement ending compatibility checking
     - Add `checkEndingCompatibility()` method using LLM
     - Score how well quote supports target ending (0-10)
     - Return compatibility score with reasoning
     - _Requirements: 3.2, 3.3, 3.4_
   
-  - [ ] 2.7 Implement intelligent quote selection logic
+  - [x] 2.7 Implement intelligent quote selection logic
     - Add `shouldUseBookQuote()` method
     - Implement decision tree based on ending type
     - Handle original vs opposite vs random endings differently
@@ -91,25 +91,25 @@ This implementation plan breaks down the game improvements into discrete, manage
     - Test that system falls back to LLM when no quotes found
     - Test that fallback doesn't cause errors
 
-- [ ] 3. Phase 3: Enhanced Game State Data Models
-  - [ ] 3.1 Update StorySegment with content source tracking
+- [x] 3. Phase 3: Enhanced Game State Data Models
+  - [x] 3.1 Update StorySegment with content source tracking
     - Change `isBookQuote` to `contentSource: 'book_quote' | 'llm_generated'`
     - Add `bookQuoteMetadata` field with chapter/page info
     - Update validation functions
     - _Requirements: 12.2, 12.3, 12.4_
   
-  - [ ] 3.2 Create BookQuoteMetadata interface
+  - [x] 3.2 Create BookQuoteMetadata interface
     - Define interface in `src/models/GameState.ts`
     - Include originalText, chapterNumber, pageNumber, contextDescription, endingCompatibilityScore
     - _Requirements: 12.4_
   
-  - [ ] 3.3 Update GameState with quote tracking
+  - [x] 3.3 Update GameState with quote tracking
     - Add `quotePercentage` configuration field
     - Add `effectiveQuotePercentage` tracking field
     - Add `quoteUsageStats` with detailed statistics
     - _Requirements: 12.1, 12.2, 12.3_
   
-  - [ ] 3.4 Update PlayerAction with content source
+  - [x] 3.4 Update PlayerAction with content source
     - Add `contentSource` field
     - Add `bookQuoteMetadata` field
     - Update validation

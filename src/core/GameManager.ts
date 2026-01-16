@@ -179,7 +179,17 @@ export class GameManager {
         currentRound: 1,
         totalRounds: rounds,
         storySegments: [],
-        targetEnding: undefined
+        targetEnding: undefined,
+        quotePercentage: 0, // Default to 0% book quotes (all LLM generated)
+        effectiveQuotePercentage: 0,
+        quoteUsageStats: {
+          totalActions: 0,
+          bookQuotesUsed: 0,
+          llmGeneratedUsed: 0,
+          configuredPercentage: 0,
+          actualPercentage: 0,
+          endingCompatibilityAdjustments: 0
+        }
       };
 
       // Create game state file (this will set the filename in metadata)
@@ -377,7 +387,8 @@ export class GameManager {
         targetEnding: gameState.targetEnding?.id || 'none',
         timestamp: new Date(),
         characterName,
-        playerId
+        playerId,
+        contentSource: 'llm_generated' // "Do nothing" actions are system-generated
       };
       
       gameState.storySegments.push(storySegment);
@@ -416,7 +427,8 @@ export class GameManager {
       targetEnding: gameState.targetEnding.id,
       timestamp: new Date(),
       characterName: actingPlayer.character?.name,
-      playerId
+      playerId,
+      contentSource: 'llm_generated' // Default to LLM generated for now
     };
 
     // Add to game state and save

@@ -188,7 +188,8 @@ export class PlayerSystem {
       type: actionType,
       diceRoll,
       timestamp: new Date(),
-      playerId: player.id
+      playerId: player.id,
+      contentSource: 'llm_generated' // Default to LLM generated
     };
   }
 

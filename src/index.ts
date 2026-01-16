@@ -440,7 +440,8 @@ function createPlayerAction(playerId: string, diceRoll: number): any {
     type: actionType,
     diceRoll,
     timestamp: new Date(),
-    playerId
+    playerId,
+    contentSource: 'llm_generated' // Default to LLM generated
   };
 }
 

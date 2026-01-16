@@ -55,7 +55,8 @@ export class GameFlowManager {
           type: actionType,
           diceRoll,
           timestamp: new Date(),
-          playerId: player.id
+          playerId: player.id,
+          contentSource: 'llm_generated' // Default to LLM generated
         };
       } else {
         // Player input received
@@ -70,7 +71,8 @@ export class GameFlowManager {
         type: actionType,
         diceRoll,
         timestamp: new Date(),
-        playerId: player.id
+        playerId: player.id,
+        contentSource: 'llm_generated' // Default to LLM generated
       };
     }
   }
@@ -145,7 +147,8 @@ export class GameFlowManager {
       type: actionType,
       diceRoll,
       timestamp: new Date(),
-      playerId: player.id
+      playerId: player.id,
+      contentSource: 'llm_generated' // Default to LLM generated
     };
 
     return { action, timedOut: false };

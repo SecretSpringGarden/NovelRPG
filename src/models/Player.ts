@@ -1,4 +1,5 @@
 import { Character } from './Character';
+import { BookQuoteMetadata } from './GameState';
 
 /**
  * Player interface representing both human and computer players
@@ -19,6 +20,8 @@ export interface PlayerAction {
   diceRoll: number;
   timestamp: Date;
   playerId: string;
+  contentSource: 'book_quote' | 'llm_generated'; // Clear marking of source
+  bookQuoteMetadata?: BookQuoteMetadata; // If book quote, include metadata
 }
 
 /**
@@ -85,6 +88,34 @@ export function validatePlayerAction(action: any): action is PlayerAction {
   // Check playerId is a non-empty string
   if (typeof action.playerId !== 'string' || action.playerId.trim() === '') {
     return false;
+  }
+
+  // Check contentSource is valid
+  if (action.contentSource !== 'book_quote' && action.contentSource !== 'llm_generated') {
+    return false;
+  }
+
+  // Check bookQuoteMetadata is optional but if present, must be valid
+  // Note: We can't import validateBookQuoteMetadata here to avoid circular dependency
+  // So we do a basic validation
+  if (action.bookQuoteMetadata !== undefined) {
+    if (!action.bookQuoteMetadata || typeof action.bookQuoteMetadata !== 'object') {
+      return false;
+    }
+    // Basic validation of required fields
+    if (typeof action.bookQuoteMetadata.originalText !== 'string' || 
+        action.bookQuoteMetadata.originalText.trim() === '') {
+      return false;
+    }
+    if (typeof action.bookQuoteMetadata.contextDescription !== 'string' || 
+        action.bookQuoteMetadata.contextDescription.trim() === '') {
+      return false;
+    }
+    if (typeof action.bookQuoteMetadata.endingCompatibilityScore !== 'number' || 
+        action.bookQuoteMetadata.endingCompatibilityScore < 0 || 
+        action.bookQuoteMetadata.endingCompatibilityScore > 10) {
+      return false;
+    }
   }
 
   return true;

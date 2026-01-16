@@ -272,7 +272,8 @@ export class TestFramework {
       type: actionType,
       diceRoll,
       timestamp: new Date(),
-      playerId
+      playerId,
+      contentSource: 'llm_generated' // Default to LLM generated
     };
   }
 

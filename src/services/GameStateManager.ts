@@ -345,7 +345,17 @@ ${gameState.storySegments.map((segment, index) => {
       ],
       currentRound: 1,
       totalRounds: metadata.totalRounds,
-      storySegments: []
+      storySegments: [],
+      quotePercentage: 0, // Default to 0% book quotes
+      effectiveQuotePercentage: 0,
+      quoteUsageStats: {
+        totalActions: 0,
+        bookQuotesUsed: 0,
+        llmGeneratedUsed: 0,
+        configuredPercentage: 0,
+        actualPercentage: 0,
+        endingCompatibilityAdjustments: 0
+      }
     };
 
     return gameState;

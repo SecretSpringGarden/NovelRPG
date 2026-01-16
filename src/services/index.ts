@@ -18,3 +18,4 @@ export { NovelAnalyzer, DefaultNovelAnalyzer, createNovelAnalyzer } from './Nove
 export { StoryGenerator, DefaultStoryGenerator, createStoryGenerator, GameContext } from './StoryGenerator';
 export { PlayerSystem, HumanPlayer, ComputerPlayer } from './PlayerSystem';
 export { GameStateManager, DefaultGameStateManager, createGameStateManager } from './GameStateManager';
+export { BookQuoteExtractor, DefaultBookQuoteExtractor, createBookQuoteExtractor, DialogueContext, CompatibilityScore } from './BookQuoteExtractor';
