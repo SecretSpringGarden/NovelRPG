@@ -63,144 +63,190 @@ export class DefaultActionChoiceManager implements ActionChoiceManager {
    * Generate action options for a player's turn
    * Requirements 11.1, 11.3: Generate both talk and act options
    * Requirements 12.2, 12.3: Apply book quote percentage and ending compatibility
+   * Requirement 11.1, 11.2, 11.3: Handle LLM failures gracefully
    */
   async generateActionOptions(player: Player, gameContext: GameContext): Promise<ActionOptions> {
-    const { gameState, recentSegments } = gameContext;
-    const character = player.character;
+    try {
+      const { gameState, recentSegments } = gameContext;
+      const character = player.character;
 
-    if (!character) {
-      throw new Error('Player must have an assigned character to generate action options');
-    }
+      // Validate inputs
+      if (!player) {
+        throw new Error('Player is required to generate action options');
+      }
 
-    // Determine if we should use book quotes based on configuration
-    const shouldUseQuotes = gameState.quotePercentage > 0 && gameState.targetEnding;
-    
-    let talkOption: string;
-    let actOption: string;
+      if (!character) {
+        throw new Error('Player must have an assigned character to generate action options');
+      }
+      
+      if (!gameState) {
+        throw new Error('Game state is required to generate action options');
+      }
 
-    // Generate talk option
-    if (shouldUseQuotes && gameState.targetEnding) {
-      // Try to use book quote for talk option
-      const useBookQuote = this.bookQuoteExtractor.shouldUseBookQuote(
-        gameState.quotePercentage,
-        gameState.targetEnding,
-        gameState.targetEnding.type
-      );
+      // Determine if we should use book quotes based on configuration
+      const shouldUseQuotes = gameState.quotePercentage > 0 && gameState.targetEnding;
+      
+      let talkOption: string;
+      let actOption: string;
 
-      if (useBookQuote) {
-        // Find dialogue context for current round
-        const dialogueContext = await this.bookQuoteExtractor.findDialogueContext(
-          gameState.currentRound,
-          gameState.totalRounds
-        );
-
-        // Extract character dialogue
-        const dialogueQuotes = await this.bookQuoteExtractor.extractCharacterDialogue(
-          character,
-          dialogueContext,
-          gameState.targetEnding
-        );
-
-        if (dialogueQuotes.length > 0) {
-          // Check ending compatibility for the first quote
-          const compatibilityScore = await this.bookQuoteExtractor.checkEndingCompatibility(
-            dialogueQuotes[0],
-            gameState.targetEnding
+      // Generate talk option with error handling
+      try {
+        if (shouldUseQuotes && gameState.targetEnding) {
+          // Try to use book quote for talk option
+          const useBookQuote = this.bookQuoteExtractor.shouldUseBookQuote(
+            gameState.quotePercentage,
+            gameState.targetEnding,
+            gameState.targetEnding.type
           );
 
-          if (compatibilityScore.shouldUse) {
-            talkOption = `[Book Quote - ${dialogueContext.sceneDescription}]\n"${dialogueQuotes[0]}"`;
+          if (useBookQuote) {
+            // Find dialogue context for current round
+            const dialogueContext = await this.bookQuoteExtractor.findDialogueContext(
+              gameState.currentRound,
+              gameState.totalRounds
+            );
+
+            // Extract character dialogue
+            const dialogueQuotes = await this.bookQuoteExtractor.extractCharacterDialogue(
+              character,
+              dialogueContext,
+              gameState.targetEnding
+            );
+
+            if (dialogueQuotes.length > 0) {
+              // Check ending compatibility for the first quote
+              const compatibilityScore = await this.bookQuoteExtractor.checkEndingCompatibility(
+                dialogueQuotes[0],
+                gameState.targetEnding
+              );
+
+              if (compatibilityScore.shouldUse) {
+                talkOption = `[Book Quote - ${dialogueContext.sceneDescription}]\n"${dialogueQuotes[0]}"`;
+              } else {
+                // Fallback to LLM if quote doesn't support ending
+                talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
+                gameState.quoteUsageStats.endingCompatibilityAdjustments++;
+              }
+            } else {
+              // Fallback to LLM if no quotes found
+              talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
+            }
           } else {
-            // Fallback to LLM if quote doesn't support ending
+            // Use LLM based on percentage
             talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
-            gameState.quoteUsageStats.endingCompatibilityAdjustments++;
           }
         } else {
-          // Fallback to LLM if no quotes found
+          // No book quotes configured, use LLM
           talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
         }
-      } else {
-        // Use LLM based on percentage
-        talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
+      } catch (error) {
+        // Requirement 11.3: Handle LLM failures in option generation
+        console.error(`❌ Error generating talk option for ${character.name}:`, error);
+        talkOption = `[LLM Generated]\n"${character.name} speaks thoughtfully about the situation."`;
       }
-    } else {
-      // No book quotes configured, use LLM
-      talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
-    }
 
-    // Generate act option
-    if (shouldUseQuotes && gameState.targetEnding) {
-      // Try to use book quote for act option
-      const useBookQuote = this.bookQuoteExtractor.shouldUseBookQuote(
-        gameState.quotePercentage,
-        gameState.targetEnding,
-        gameState.targetEnding.type
-      );
-
-      if (useBookQuote) {
-        // Find dialogue context for current round
-        const dialogueContext = await this.bookQuoteExtractor.findDialogueContext(
-          gameState.currentRound,
-          gameState.totalRounds
-        );
-
-        // Extract character actions
-        const actionQuotes = await this.bookQuoteExtractor.extractCharacterActions(
-          character,
-          dialogueContext,
-          gameState.targetEnding
-        );
-
-        if (actionQuotes.length > 0) {
-          // Check ending compatibility for the first quote
-          const compatibilityScore = await this.bookQuoteExtractor.checkEndingCompatibility(
-            actionQuotes[0],
-            gameState.targetEnding
+      // Generate act option with error handling
+      try {
+        if (shouldUseQuotes && gameState.targetEnding) {
+          // Try to use book quote for act option
+          const useBookQuote = this.bookQuoteExtractor.shouldUseBookQuote(
+            gameState.quotePercentage,
+            gameState.targetEnding,
+            gameState.targetEnding.type
           );
 
-          if (compatibilityScore.shouldUse) {
-            actOption = `[Book Quote - ${dialogueContext.sceneDescription}]\n${actionQuotes[0]}`;
+          if (useBookQuote) {
+            // Find dialogue context for current round
+            const dialogueContext = await this.bookQuoteExtractor.findDialogueContext(
+              gameState.currentRound,
+              gameState.totalRounds
+            );
+
+            // Extract character actions
+            const actionQuotes = await this.bookQuoteExtractor.extractCharacterActions(
+              character,
+              dialogueContext,
+              gameState.targetEnding
+            );
+
+            if (actionQuotes.length > 0) {
+              // Check ending compatibility for the first quote
+              const compatibilityScore = await this.bookQuoteExtractor.checkEndingCompatibility(
+                actionQuotes[0],
+                gameState.targetEnding
+              );
+
+              if (compatibilityScore.shouldUse) {
+                actOption = `[Book Quote - ${dialogueContext.sceneDescription}]\n${actionQuotes[0]}`;
+              } else {
+                // Fallback to LLM if quote doesn't support ending
+                actOption = await this.generateLLMActOption(character, gameState, recentSegments);
+                gameState.quoteUsageStats.endingCompatibilityAdjustments++;
+              }
+            } else {
+              // Fallback to LLM if no quotes found
+              actOption = await this.generateLLMActOption(character, gameState, recentSegments);
+            }
           } else {
-            // Fallback to LLM if quote doesn't support ending
+            // Use LLM based on percentage
             actOption = await this.generateLLMActOption(character, gameState, recentSegments);
-            gameState.quoteUsageStats.endingCompatibilityAdjustments++;
           }
         } else {
-          // Fallback to LLM if no quotes found
+          // No book quotes configured, use LLM
           actOption = await this.generateLLMActOption(character, gameState, recentSegments);
         }
-      } else {
-        // Use LLM based on percentage
-        actOption = await this.generateLLMActOption(character, gameState, recentSegments);
+      } catch (error) {
+        // Requirement 11.3: Handle LLM failures in option generation
+        console.error(`❌ Error generating act option for ${character.name}:`, error);
+        actOption = `[LLM Generated]\n${character.name} takes a decisive action.`;
       }
-    } else {
-      // No book quotes configured, use LLM
-      actOption = await this.generateLLMActOption(character, gameState, recentSegments);
+
+      const doNothingOption = 'Do nothing (increases total rounds by 1)';
+
+      return {
+        talkOption,
+        actOption,
+        doNothingOption
+      };
+    } catch (error) {
+      // Requirement 11.3: Handle overall failures gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Critical error generating action options: ${errorMessage}`);
+      
+      // Return fallback options
+      return {
+        talkOption: '[LLM Generated]\n"I have something to say about this."',
+        actOption: '[LLM Generated]\nThe character takes an action.',
+        doNothingOption: 'Do nothing (increases total rounds by 1)'
+      };
     }
-
-    const doNothingOption = 'Do nothing (increases total rounds by 1)';
-
-    return {
-      talkOption,
-      actOption,
-      doNothingOption
-    };
   }
 
   /**
    * Generate a talk option using LLM
+   * Requirement 11.3: Handle LLM failures gracefully
    */
   private async generateLLMTalkOption(
     character: Character,
     gameState: GameState,
     recentSegments: StorySegment[]
   ): Promise<string> {
-    const recentStory = recentSegments
-      .slice(-3)
-      .map(seg => seg.content)
-      .join('\n\n');
+    try {
+      // Validate inputs
+      if (!character || !character.name) {
+        throw new Error('Invalid character provided');
+      }
+      
+      if (!gameState) {
+        throw new Error('Invalid game state provided');
+      }
+      
+      const recentStory = recentSegments
+        .slice(-3)
+        .map(seg => seg.content)
+        .join('\n\n');
 
-    const prompt = `You are generating dialogue for ${character.name} in a story based on "${gameState.metadata.novelTitle}".
+      const prompt = `You are generating dialogue for ${character.name} in a story based on "${gameState.metadata.novelTitle}".
 
 Character: ${character.name}
 Description: ${character.description}
@@ -219,31 +265,63 @@ Generate a single line of dialogue (1-2 sentences, 20-50 words) that ${character
 
 Respond with ONLY the dialogue, nothing else.`;
 
-    const response = await this.llmService.generateContent(prompt, {});
-    
-    // Clean up response - remove extra quotes if present
-    let dialogue = response.trim();
-    if (dialogue.startsWith('"') && dialogue.endsWith('"')) {
-      dialogue = dialogue.slice(1, -1);
+      // Set timeout for LLM call
+      const timeoutMs = 15000; // 15 seconds
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('LLM call timeout')), timeoutMs);
+      });
+      
+      const llmPromise = this.llmService.generateContent(prompt, {});
+      
+      const response = await Promise.race([llmPromise, timeoutPromise]);
+      
+      // Clean up response - remove extra quotes if present
+      let dialogue = response.trim();
+      if (dialogue.startsWith('"') && dialogue.endsWith('"')) {
+        dialogue = dialogue.slice(1, -1);
+      }
+      
+      // Validate response is not empty
+      if (!dialogue || dialogue.trim().length === 0) {
+        throw new Error('Empty response from LLM');
+      }
+      
+      return `[LLM Generated]\n"${dialogue}"`;
+    } catch (error) {
+      // Requirement 11.3: Handle LLM failures gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Error generating LLM talk option: ${errorMessage}`);
+      
+      // Return fallback dialogue
+      return `[LLM Generated]\n"${character.name} speaks thoughtfully about the situation."`;
     }
-    
-    return `[LLM Generated]\n"${dialogue}"`;
   }
 
   /**
    * Generate an act option using LLM
+   * Requirement 11.3: Handle LLM failures gracefully
    */
   private async generateLLMActOption(
     character: Character,
     gameState: GameState,
     recentSegments: StorySegment[]
   ): Promise<string> {
-    const recentStory = recentSegments
-      .slice(-3)
-      .map(seg => seg.content)
-      .join('\n\n');
+    try {
+      // Validate inputs
+      if (!character || !character.name) {
+        throw new Error('Invalid character provided');
+      }
+      
+      if (!gameState) {
+        throw new Error('Invalid game state provided');
+      }
+      
+      const recentStory = recentSegments
+        .slice(-3)
+        .map(seg => seg.content)
+        .join('\n\n');
 
-    const prompt = `You are generating a narrative action for ${character.name} in a story based on "${gameState.metadata.novelTitle}".
+      const prompt = `You are generating a narrative action for ${character.name} in a story based on "${gameState.metadata.novelTitle}".
 
 Character: ${character.name}
 Description: ${character.description}
@@ -262,9 +340,30 @@ Generate a brief narrative description (1-2 sentences, 20-50 words) of an action
 
 Respond with ONLY the action description, nothing else.`;
 
-    const response = await this.llmService.generateContent(prompt, {});
-    
-    return `[LLM Generated]\n${response.trim()}`;
+      // Set timeout for LLM call
+      const timeoutMs = 15000; // 15 seconds
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('LLM call timeout')), timeoutMs);
+      });
+      
+      const llmPromise = this.llmService.generateContent(prompt, {});
+      
+      const response = await Promise.race([llmPromise, timeoutPromise]);
+      
+      // Validate response is not empty
+      if (!response || response.trim().length === 0) {
+        throw new Error('Empty response from LLM');
+      }
+      
+      return `[LLM Generated]\n${response.trim()}`;
+    } catch (error) {
+      // Requirement 11.3: Handle LLM failures gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Error generating LLM act option: ${errorMessage}`);
+      
+      // Return fallback action
+      return `[LLM Generated]\n${character.name} takes a decisive action.`;
+    }
   }
 
   /**
@@ -273,98 +372,144 @@ Respond with ONLY the action description, nothing else.`;
    * Requirement 11.3: For computer players, randomly select from three options
    * Requirement 11.5: Computer players use random selection
    * Requirement 14.1: Display format "Character_Name (Player X) chose: [action]"
+   * Requirement 11.3: Handle player timeouts and invalid selections
    */
   async presentOptionsToPlayer(player: Player, options: ActionOptions): Promise<PlayerChoice> {
-    // Requirement 14.1, 14.4: Format display name with character and player number
-    const displayName = this.getPlayerDisplayName(player);
-    
-    if (player.type === 'human') {
-      // For human players: display options and wait for input
-      console.log(`\n🎭 ${displayName}'s Turn - Choose an action:`);
-      console.log(`1. TALK: ${options.talkOption}`);
-      console.log(`2. ACT: ${options.actOption}`);
-      console.log(`3. DO NOTHING: ${options.doNothingOption}`);
-      
-      // Use the player's makeChoice method to get selection
-      const choiceOptions = ['1', '2', '3'];
-      const selection = await player.makeChoice(choiceOptions);
-      
-      // Map selection to action type
-      let selectedAction: 'talk' | 'act' | 'nothing';
-      let selectedContent: string;
-      let contentSource: 'book_quote' | 'llm_generated';
-      let bookQuoteMetadata: BookQuoteMetadata | undefined;
-      
-      switch (selection) {
-        case '1':
-          selectedAction = 'talk';
-          selectedContent = options.talkOption;
-          contentSource = this.extractContentSource(options.talkOption);
-          bookQuoteMetadata = this.extractBookQuoteMetadata(options.talkOption, contentSource);
-          break;
-        case '2':
-          selectedAction = 'act';
-          selectedContent = options.actOption;
-          contentSource = this.extractContentSource(options.actOption);
-          bookQuoteMetadata = this.extractBookQuoteMetadata(options.actOption, contentSource);
-          break;
-        case '3':
-        default:
-          selectedAction = 'nothing';
-          selectedContent = options.doNothingOption;
-          contentSource = 'llm_generated'; // System-generated
-          break;
+    try {
+      // Validate inputs
+      if (!player) {
+        throw new Error('Player is required');
       }
       
-      // Requirement 14.1: Display choice in format "Character_Name (Player X) chose: [action]"
-      console.log(`✅ ${displayName} chose: ${selectedAction.toUpperCase()}`);
-      
-      return {
-        selectedAction,
-        selectedContent,
-        timestamp: new Date(),
-        contentSource,
-        bookQuoteMetadata
-      };
-    } else {
-      // For computer players: randomly select from three options
-      const randomChoice = Math.floor(Math.random() * 3);
-      
-      let selectedAction: 'talk' | 'act' | 'nothing';
-      let selectedContent: string;
-      let contentSource: 'book_quote' | 'llm_generated';
-      let bookQuoteMetadata: BookQuoteMetadata | undefined;
-      
-      switch (randomChoice) {
-        case 0:
-          selectedAction = 'talk';
-          selectedContent = options.talkOption;
-          contentSource = this.extractContentSource(options.talkOption);
-          bookQuoteMetadata = this.extractBookQuoteMetadata(options.talkOption, contentSource);
-          break;
-        case 1:
-          selectedAction = 'act';
-          selectedContent = options.actOption;
-          contentSource = this.extractContentSource(options.actOption);
-          bookQuoteMetadata = this.extractBookQuoteMetadata(options.actOption, contentSource);
-          break;
-        case 2:
-        default:
-          selectedAction = 'nothing';
-          selectedContent = options.doNothingOption;
-          contentSource = 'llm_generated'; // System-generated
-          break;
+      if (!options || !options.talkOption || !options.actOption || !options.doNothingOption) {
+        throw new Error('Invalid options provided');
       }
       
-      // Requirement 14.1: Display choice in format "Character_Name (Player X) chose: [action]"
-      console.log(`🤖 ${displayName} chose: ${selectedAction.toUpperCase()}`);
+      // Requirement 14.1, 14.4: Format display name with character and player number
+      const displayName = this.getPlayerDisplayName(player);
       
+      if (player.type === 'human') {
+        // For human players: display options and wait for input
+        console.log(`\n🎭 ${displayName}'s Turn - Choose an action:`);
+        console.log(`1. TALK: ${options.talkOption}`);
+        console.log(`2. ACT: ${options.actOption}`);
+        console.log(`3. DO NOTHING: ${options.doNothingOption}`);
+        
+        // Use the player's makeChoice method to get selection with timeout handling
+        const choiceOptions = ['1', '2', '3'];
+        let selection: string;
+        
+        try {
+          // Set timeout for player selection (60 seconds)
+          const timeoutMs = 60000;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Player selection timeout')), timeoutMs);
+          });
+          
+          const choicePromise = player.makeChoice(choiceOptions);
+          selection = await Promise.race([choicePromise, timeoutPromise]);
+        } catch (error) {
+          // Requirement 11.3: Handle player timeouts
+          console.warn(`⚠️  Player selection timeout, defaulting to "do nothing"`);
+          selection = '3'; // Default to "do nothing"
+        }
+        
+        // Validate selection
+        if (!['1', '2', '3'].includes(selection)) {
+          // Requirement 11.3: Handle invalid selections
+          console.warn(`⚠️  Invalid selection "${selection}", defaulting to "do nothing"`);
+          selection = '3';
+        }
+        
+        // Map selection to action type
+        let selectedAction: 'talk' | 'act' | 'nothing';
+        let selectedContent: string;
+        let contentSource: 'book_quote' | 'llm_generated';
+        let bookQuoteMetadata: BookQuoteMetadata | undefined;
+        
+        switch (selection) {
+          case '1':
+            selectedAction = 'talk';
+            selectedContent = options.talkOption;
+            contentSource = this.extractContentSource(options.talkOption);
+            bookQuoteMetadata = this.extractBookQuoteMetadata(options.talkOption, contentSource);
+            break;
+          case '2':
+            selectedAction = 'act';
+            selectedContent = options.actOption;
+            contentSource = this.extractContentSource(options.actOption);
+            bookQuoteMetadata = this.extractBookQuoteMetadata(options.actOption, contentSource);
+            break;
+          case '3':
+          default:
+            selectedAction = 'nothing';
+            selectedContent = options.doNothingOption;
+            contentSource = 'llm_generated'; // System-generated
+            break;
+        }
+        
+        // Requirement 14.1: Display choice in format "Character_Name (Player X) chose: [action]"
+        console.log(`✅ ${displayName} chose: ${selectedAction.toUpperCase()}`);
+        
+        return {
+          selectedAction,
+          selectedContent,
+          timestamp: new Date(),
+          contentSource,
+          bookQuoteMetadata
+        };
+      } else {
+        // For computer players: randomly select from three options
+        const randomChoice = Math.floor(Math.random() * 3);
+        
+        let selectedAction: 'talk' | 'act' | 'nothing';
+        let selectedContent: string;
+        let contentSource: 'book_quote' | 'llm_generated';
+        let bookQuoteMetadata: BookQuoteMetadata | undefined;
+        
+        switch (randomChoice) {
+          case 0:
+            selectedAction = 'talk';
+            selectedContent = options.talkOption;
+            contentSource = this.extractContentSource(options.talkOption);
+            bookQuoteMetadata = this.extractBookQuoteMetadata(options.talkOption, contentSource);
+            break;
+          case 1:
+            selectedAction = 'act';
+            selectedContent = options.actOption;
+            contentSource = this.extractContentSource(options.actOption);
+            bookQuoteMetadata = this.extractBookQuoteMetadata(options.actOption, contentSource);
+            break;
+          case 2:
+          default:
+            selectedAction = 'nothing';
+            selectedContent = options.doNothingOption;
+            contentSource = 'llm_generated'; // System-generated
+            break;
+        }
+        
+        // Requirement 14.1: Display choice in format "Character_Name (Player X) chose: [action]"
+        console.log(`🤖 ${displayName} chose: ${selectedAction.toUpperCase()}`);
+        
+        return {
+          selectedAction,
+          selectedContent,
+          timestamp: new Date(),
+          contentSource,
+          bookQuoteMetadata
+        };
+      }
+    } catch (error) {
+      // Requirement 11.3: Handle overall failures gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Error presenting options to player: ${errorMessage}`);
+      
+      // Return default "do nothing" choice
       return {
-        selectedAction,
-        selectedContent,
+        selectedAction: 'nothing',
+        selectedContent: options?.doNothingOption || 'Do nothing (increases total rounds by 1)',
         timestamp: new Date(),
-        contentSource,
-        bookQuoteMetadata
+        contentSource: 'llm_generated'
       };
     }
   }

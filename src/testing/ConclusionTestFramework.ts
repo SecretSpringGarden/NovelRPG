@@ -92,23 +92,64 @@ export class ConclusionTestFramework {
    * Requirement 4.1, 4.4, 4.5: Validate iteration count and output directory
    */
   private validateConfiguration(config: ConclusionTestConfig): ConclusionTestConfig {
+    const errors: string[] = [];
     const validated = { ...config };
     
+    // Validate novel file path is provided
+    if (!validated.novelFile || validated.novelFile.trim() === '') {
+      errors.push('Novel file path is required');
+    } else {
+      // Validate novel file exists
+      if (!fs.existsSync(validated.novelFile)) {
+        errors.push(`Novel file not found: ${validated.novelFile}`);
+      } else {
+        // Validate file is readable
+        try {
+          fs.accessSync(validated.novelFile, fs.constants.R_OK);
+        } catch (error) {
+          errors.push(`Novel file is not readable: ${validated.novelFile}`);
+        }
+        
+        // Validate file size is reasonable (not empty, not too large)
+        const stats = fs.statSync(validated.novelFile);
+        if (stats.size === 0) {
+          errors.push('Novel file is empty');
+        } else if (stats.size > 100 * 1024 * 1024) { // 100MB limit
+          errors.push(`Novel file is too large (${(stats.size / 1024 / 1024).toFixed(2)}MB). Maximum size is 100MB`);
+        }
+      }
+    }
+    
     // Validate iteration count (1-10)
-    if (!validated.iterations || validated.iterations < 1 || validated.iterations > 10) {
+    // Requirement 4.4: Iteration count must be between 1 and 10
+    if (validated.iterations === undefined || validated.iterations === null) {
+      console.warn(`⚠️  Iteration count not specified, using default value of 5`);
+      validated.iterations = 5;
+    } else if (!Number.isInteger(validated.iterations)) {
+      errors.push(`Iteration count must be an integer, got: ${validated.iterations}`);
+    } else if (validated.iterations < 1 || validated.iterations > 10) {
       console.warn(`⚠️  Invalid iteration count ${validated.iterations}, clamping to range 1-10`);
-      validated.iterations = Math.max(1, Math.min(10, validated.iterations || 5));
+      validated.iterations = Math.max(1, Math.min(10, validated.iterations));
     }
     
     // Use default output directory if not specified
-    if (!validated.outputDirectory) {
+    // Requirement 4.5: Use default output directory when not specified
+    if (!validated.outputDirectory || validated.outputDirectory.trim() === '') {
       validated.outputDirectory = 'test_outputs';
       console.log(`ℹ️  Using default output directory: ${validated.outputDirectory}`);
+    } else {
+      // Validate output directory path is valid
+      const invalidChars = /[<>:"|?*]/;
+      if (invalidChars.test(validated.outputDirectory)) {
+        errors.push(`Output directory contains invalid characters: ${validated.outputDirectory}`);
+      }
     }
     
-    // Validate novel file exists
-    if (!fs.existsSync(validated.novelFile)) {
-      throw new Error(`Novel file not found: ${validated.novelFile}`);
+    // Throw error if any validation failed
+    if (errors.length > 0) {
+      const errorMessage = `Configuration validation failed:\n  - ${errors.join('\n  - ')}`;
+      console.error(`❌ ${errorMessage}`);
+      throw new Error(errorMessage);
     }
     
     return validated;
@@ -127,6 +168,7 @@ export class ConclusionTestFramework {
   /**
    * Runs the complete conclusion test
    * Requirement 2.1, 2.2: Execute novel analysis N times and extract conclusions
+   * Requirement 10.1, 10.2, 10.3, 10.4, 10.5: Handle errors and continue with remaining tests
    */
   async runConclusionTest(): Promise<ConclusionTestReport> {
     console.log(`🚀 Running conclusion test for: ${path.basename(this.config.novelFile)}`);
@@ -134,68 +176,123 @@ export class ConclusionTestFramework {
     console.log('⏱️  Adding delays between operations to respect API rate limits...');
     
     // Initialize LLM service
-    const llmConfig = ConfigManager.getInstance().getLLMConfig();
-    await this.llmService.initialize(llmConfig);
-    console.log('✅ LLM service initialized for testing');
+    try {
+      const llmConfig = ConfigManager.getInstance().getLLMConfig();
+      await this.llmService.initialize(llmConfig);
+      console.log('✅ LLM service initialized for testing');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Failed to initialize LLM service: ${errorMessage}`);
+      throw new Error(`LLM initialization failed: ${errorMessage}`);
+    }
     
     const iterations: ConclusionIteration[] = [];
+    const errors: string[] = [];
     
     try {
       // Execute N iterations of novel analysis
       for (let i = 1; i <= this.config.iterations; i++) {
         console.log(`\n📖 Running iteration ${i}/${this.config.iterations}...`);
         
-        // Add delay between iterations to respect rate limits
-        if (i > 1) {
-          console.log('⏳ Waiting 30 seconds between iterations to respect API rate limits...');
-          await this.sleep(30000); // 30 second delay between iterations
+        try {
+          // Add delay between iterations to respect rate limits
+          if (i > 1) {
+            console.log('⏳ Waiting 30 seconds between iterations to respect API rate limits...');
+            await this.sleep(30000); // 30 second delay between iterations
+          }
+          
+          // Analyze novel
+          console.log('🔍 Analyzing novel...');
+          const novelText = fs.readFileSync(this.config.novelFile, 'utf-8');
+          const analysis = await this.novelAnalyzer.analyzeNovel(novelText);
+          
+          // Extract conclusion
+          const conclusionText = analysis.conclusion;
+          console.log(`✅ Conclusion extracted (${conclusionText.length} characters)`);
+          
+          // Score conclusion quality
+          console.log('📊 Scoring conclusion quality...');
+          await this.sleep(5000); // Small delay before scoring
+          
+          let qualityScores: QualityScores;
+          try {
+            qualityScores = await this.scoreConclusionQuality(conclusionText, conclusionText);
+          } catch (error) {
+            // Requirement 10.2: Handle scoring failures
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.warn(`⚠️  Failed to score conclusion quality: ${errorMessage}`);
+            errors.push(`Iteration ${i}: Scoring failed - ${errorMessage}`);
+            
+            // Use default scores
+            qualityScores = {
+              accuracy: 5,
+              completeness: 5,
+              coherence: 5,
+              reasoning: `Scoring failed: ${errorMessage}`
+            };
+          }
+          
+          // Extract key elements (simple word extraction for now)
+          const keyElements = this.extractKeyElements(conclusionText);
+          
+          // Create iteration result
+          const iteration: ConclusionIteration = {
+            iterationNumber: i,
+            conclusionText,
+            accuracyScore: qualityScores.accuracy,
+            completenessScore: qualityScores.completeness,
+            coherenceScore: qualityScores.coherence,
+            wordCount: conclusionText.split(/\s+/).length,
+            keyElements
+          };
+          
+          iterations.push(iteration);
+          console.log(`✅ Iteration ${i} complete`);
+          console.log(`   Accuracy: ${qualityScores.accuracy}/10`);
+          console.log(`   Completeness: ${qualityScores.completeness}/10`);
+          console.log(`   Coherence: ${qualityScores.coherence}/10`);
+          
+          // Cleanup after each iteration
+          await this.novelAnalyzer.cleanup();
+          
+        } catch (error) {
+          // Requirement 10.1: Handle analysis failures in iterations
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error(`❌ Iteration ${i} failed: ${errorMessage}`);
+          errors.push(`Iteration ${i}: Analysis failed - ${errorMessage}`);
+          
+          // Continue with remaining iterations
+          console.log(`⚠️  Continuing with remaining iterations...`);
         }
-        
-        // Analyze novel
-        console.log('🔍 Analyzing novel...');
-        const novelText = fs.readFileSync(this.config.novelFile, 'utf-8');
-        const analysis = await this.novelAnalyzer.analyzeNovel(novelText);
-        
-        // Extract conclusion
-        const conclusionText = analysis.conclusion;
-        console.log(`✅ Conclusion extracted (${conclusionText.length} characters)`);
-        
-        // Score conclusion quality
-        console.log('📊 Scoring conclusion quality...');
-        await this.sleep(5000); // Small delay before scoring
-        const qualityScores = await this.scoreConclusionQuality(conclusionText, conclusionText);
-        
-        // Extract key elements (simple word extraction for now)
-        const keyElements = this.extractKeyElements(conclusionText);
-        
-        // Create iteration result
-        const iteration: ConclusionIteration = {
-          iterationNumber: i,
-          conclusionText,
-          accuracyScore: qualityScores.accuracy,
-          completenessScore: qualityScores.completeness,
-          coherenceScore: qualityScores.coherence,
-          wordCount: conclusionText.split(/\s+/).length,
-          keyElements
-        };
-        
-        iterations.push(iteration);
-        console.log(`✅ Iteration ${i} complete`);
-        console.log(`   Accuracy: ${qualityScores.accuracy}/10`);
-        console.log(`   Completeness: ${qualityScores.completeness}/10`);
-        console.log(`   Coherence: ${qualityScores.coherence}/10`);
-        
-        // Cleanup after each iteration
-        await this.novelAnalyzer.cleanup();
+      }
+      
+      // Check if we have any successful iterations
+      if (iterations.length === 0) {
+        throw new Error('All iterations failed. No data to analyze.');
       }
       
       console.log(`\n🔍 Analyzing consistency across ${iterations.length} iterations...`);
       
       // Analyze consistency
-      await this.sleep(5000); // Small delay before consistency analysis
-      const consistencyScore = await this.analyzeConclusionConsistency(
-        iterations.map(it => it.conclusionText)
-      );
+      let consistencyScore: ConsistencyScore;
+      try {
+        await this.sleep(5000); // Small delay before consistency analysis
+        consistencyScore = await this.analyzeConclusionConsistency(
+          iterations.map(it => it.conclusionText)
+        );
+      } catch (error) {
+        // Requirement 10.2: Handle scoring failures
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`⚠️  Failed to analyze consistency: ${errorMessage}`);
+        errors.push(`Consistency analysis failed: ${errorMessage}`);
+        
+        // Use default consistency score
+        consistencyScore = {
+          score: 5,
+          similarityMatrix: iterations.map(() => iterations.map(() => 0.5)),
+          outliers: []
+        };
+      }
       
       // Calculate averages
       const averageAccuracy = this.calculateAverage(iterations.map(it => it.accuracyScore));
@@ -219,14 +316,49 @@ export class ConclusionTestFramework {
       console.log(`📊 Average Coherence: ${averageCoherence.toFixed(2)}/10`);
       console.log(`📊 Consistency Score: ${consistencyScore.score.toFixed(2)}/10`);
       
+      if (errors.length > 0) {
+        console.log(`\n⚠️  ${errors.length} error(s) occurred during testing:`);
+        errors.forEach(err => console.log(`   - ${err}`));
+      }
+      
       // Save reports
-      await this.saveReports(report);
+      try {
+        await this.saveReports(report);
+      } catch (error) {
+        // Requirement 10.3: Handle report generation failures
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`❌ Failed to save reports: ${errorMessage}`);
+        errors.push(`Report generation failed: ${errorMessage}`);
+        // Don't throw - we still have the report data
+      }
       
       return report;
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Conclusion test failed:', errorMessage);
+      
+      // If we have partial results, try to return them
+      if (iterations.length > 0) {
+        console.log(`⚠️  Returning partial results from ${iterations.length} successful iteration(s)`);
+        
+        const partialReport: ConclusionTestReport = {
+          iterations,
+          consistencyScore: {
+            score: 0,
+            similarityMatrix: [],
+            outliers: []
+          },
+          averageAccuracy: this.calculateAverage(iterations.map(it => it.accuracyScore)),
+          averageCompleteness: this.calculateAverage(iterations.map(it => it.completenessScore)),
+          averageCoherence: this.calculateAverage(iterations.map(it => it.coherenceScore)),
+          generatedAt: new Date(),
+          testConfiguration: this.config
+        };
+        
+        return partialReport;
+      }
+      
       throw error;
     }
   }

@@ -63,75 +63,111 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
    * Extract character dialogue from the novel
    * Requirement 12.2: Use actual book quotes for talk actions
    * Requirement 12.4: Extract dialogue matching the character
+   * Requirement 12.7: Handle no quotes found gracefully
    */
   async extractCharacterDialogue(
     character: Character,
     context?: DialogueContext,
     targetEnding?: StoryEnding
   ): Promise<string[]> {
-    // Check cache first for performance
-    const cacheKey = `${character.id}_${context?.startPosition || 0}_${context?.endPosition || this.novelText.length}`;
-    if (this.dialogueCache.has(cacheKey)) {
-      return this.dialogueCache.get(cacheKey)!;
-    }
-
-    // Determine the text section to search
-    const searchText = context 
-      ? this.novelText.substring(context.startPosition, context.endPosition)
-      : this.novelText;
-
-    // Extract dialogue using multiple patterns
-    const dialogueQuotes: string[] = [];
-
-    // Pattern 1: "Character said, 'dialogue'"
-    const pattern1 = new RegExp(
-      `${this.escapeRegex(character.name)}\\s+(?:said|replied|asked|exclaimed|whispered|shouted|murmured|answered|continued|added|remarked|observed|declared|stated|announced|cried|muttered|responded)[^"']*["']([^"']{10,200})["']`,
-      'gi'
-    );
-
-    // Pattern 2: "'dialogue,' said Character"
-    const pattern2 = new RegExp(
-      `["']([^"']{10,200})["'][^.]*?(?:said|replied|asked|exclaimed|whispered|shouted|murmured|answered|continued|added|remarked|observed|declared|stated|announced|cried|muttered|responded)\\s+${this.escapeRegex(character.name)}`,
-      'gi'
-    );
-
-    // Pattern 3: Character: "dialogue" (for plays or dialogue-heavy texts)
-    const pattern3 = new RegExp(
-      `${this.escapeRegex(character.name)}\\s*:\\s*["']([^"']{10,200})["']`,
-      'gi'
-    );
-
-    // Extract using all patterns
-    let match;
-    
-    while ((match = pattern1.exec(searchText)) !== null) {
-      const quote = match[1].trim();
-      if (quote.length >= 10 && quote.length <= 200) {
-        dialogueQuotes.push(quote);
+    try {
+      // Validate inputs
+      if (!character || !character.name) {
+        console.warn('⚠️  Invalid character provided to extractCharacterDialogue');
+        return [];
       }
-    }
-
-    while ((match = pattern2.exec(searchText)) !== null) {
-      const quote = match[1].trim();
-      if (quote.length >= 10 && quote.length <= 200) {
-        dialogueQuotes.push(quote);
+      
+      // Check cache first for performance
+      const cacheKey = `${character.id}_${context?.startPosition || 0}_${context?.endPosition || this.novelText.length}`;
+      if (this.dialogueCache.has(cacheKey)) {
+        return this.dialogueCache.get(cacheKey)!;
       }
-    }
 
-    while ((match = pattern3.exec(searchText)) !== null) {
-      const quote = match[1].trim();
-      if (quote.length >= 10 && quote.length <= 200) {
-        dialogueQuotes.push(quote);
+      // Determine the text section to search
+      const searchText = context 
+        ? this.novelText.substring(context.startPosition, context.endPosition)
+        : this.novelText;
+      
+      // Validate search text is not empty
+      if (!searchText || searchText.trim().length === 0) {
+        console.warn(`⚠️  Empty search text for character ${character.name}`);
+        return [];
       }
+
+      // Extract dialogue using multiple patterns
+      const dialogueQuotes: string[] = [];
+
+      // Pattern 1: "Character said, 'dialogue'"
+      const pattern1 = new RegExp(
+        `${this.escapeRegex(character.name)}\\s+(?:said|replied|asked|exclaimed|whispered|shouted|murmured|answered|continued|added|remarked|observed|declared|stated|announced|cried|muttered|responded)[^"']*["']([^"']{10,200})["']`,
+        'gi'
+      );
+
+      // Pattern 2: "'dialogue,' said Character"
+      const pattern2 = new RegExp(
+        `["']([^"']{10,200})["'][^.]*?(?:said|replied|asked|exclaimed|whispered|shouted|murmured|answered|continued|added|remarked|observed|declared|stated|announced|cried|muttered|responded)\\s+${this.escapeRegex(character.name)}`,
+        'gi'
+      );
+
+      // Pattern 3: Character: "dialogue" (for plays or dialogue-heavy texts)
+      const pattern3 = new RegExp(
+        `${this.escapeRegex(character.name)}\\s*:\\s*["']([^"']{10,200})["']`,
+        'gi'
+      );
+
+      // Extract using all patterns with error handling
+      let match;
+      
+      try {
+        while ((match = pattern1.exec(searchText)) !== null) {
+          const quote = match[1].trim();
+          if (quote.length >= 10 && quote.length <= 200) {
+            dialogueQuotes.push(quote);
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️  Error extracting dialogue with pattern 1 for ${character.name}:`, error);
+      }
+
+      try {
+        while ((match = pattern2.exec(searchText)) !== null) {
+          const quote = match[1].trim();
+          if (quote.length >= 10 && quote.length <= 200) {
+            dialogueQuotes.push(quote);
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️  Error extracting dialogue with pattern 2 for ${character.name}:`, error);
+      }
+
+      try {
+        while ((match = pattern3.exec(searchText)) !== null) {
+          const quote = match[1].trim();
+          if (quote.length >= 10 && quote.length <= 200) {
+            dialogueQuotes.push(quote);
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️  Error extracting dialogue with pattern 3 for ${character.name}:`, error);
+      }
+
+      // Remove duplicates
+      const uniqueQuotes = Array.from(new Set(dialogueQuotes));
+
+      // Cache the results
+      this.dialogueCache.set(cacheKey, uniqueQuotes);
+      
+      // Log if no quotes found
+      if (uniqueQuotes.length === 0) {
+        console.log(`ℹ️  No dialogue quotes found for ${character.name} in the specified context`);
+      }
+
+      return uniqueQuotes;
+    } catch (error) {
+      // Requirement 12.7: Handle extraction errors gracefully
+      console.error(`❌ Error extracting dialogue for ${character.name}:`, error);
+      return []; // Return empty array to allow fallback to LLM
     }
-
-    // Remove duplicates
-    const uniqueQuotes = Array.from(new Set(dialogueQuotes));
-
-    // Cache the results
-    this.dialogueCache.set(cacheKey, uniqueQuotes);
-
-    return uniqueQuotes;
   }
 
   /**
@@ -145,79 +181,111 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
    * Extract character actions from the novel
    * Requirement 12.3: Use actual book quotes for act actions
    * Requirement 12.4: Extract narrative descriptions of character actions
+   * Requirement 12.7: Handle no quotes found gracefully
    */
   async extractCharacterActions(
     character: Character,
     context?: DialogueContext,
     targetEnding?: StoryEnding
   ): Promise<string[]> {
-    // Check cache first for performance
-    const cacheKey = `action_${character.id}_${context?.startPosition || 0}_${context?.endPosition || this.novelText.length}`;
-    if (this.actionCache.has(cacheKey)) {
-      return this.actionCache.get(cacheKey)!;
-    }
-
-    // Determine the text section to search
-    const searchText = context 
-      ? this.novelText.substring(context.startPosition, context.endPosition)
-      : this.novelText;
-
-    // Extract action descriptions using patterns
-    const actionQuotes: string[] = [];
-
-    // Common action verbs to look for
-    const actionVerbs = [
-      'walked', 'ran', 'entered', 'left', 'approached', 'turned', 'looked', 'gazed',
-      'stood', 'sat', 'rose', 'moved', 'stepped', 'hurried', 'rushed', 'paused',
-      'stopped', 'opened', 'closed', 'took', 'gave', 'held', 'placed', 'picked',
-      'smiled', 'laughed', 'frowned', 'nodded', 'shook', 'bowed', 'gestured',
-      'embraced', 'kissed', 'touched', 'reached', 'grasped', 'seized', 'released'
-    ];
-
-    // Pattern: Character + action verb + description
-    // Example: "Elizabeth walked slowly across the room, her mind troubled."
-    const actionPattern = new RegExp(
-      `${this.escapeRegex(character.name)}\\s+(${actionVerbs.join('|')})\\s+([^.!?]{10,150}[.!?])`,
-      'gi'
-    );
-
-    let match;
-    while ((match = actionPattern.exec(searchText)) !== null) {
-      const fullMatch = match[0].trim();
-      if (fullMatch.length >= 20 && fullMatch.length <= 200) {
-        actionQuotes.push(fullMatch);
+    try {
+      // Validate inputs
+      if (!character || !character.name) {
+        console.warn('⚠️  Invalid character provided to extractCharacterActions');
+        return [];
       }
-    }
+      
+      // Check cache first for performance
+      const cacheKey = `action_${character.id}_${context?.startPosition || 0}_${context?.endPosition || this.novelText.length}`;
+      if (this.actionCache.has(cacheKey)) {
+        return this.actionCache.get(cacheKey)!;
+      }
 
-    // Pattern: Narrative sentences containing the character's name and action
-    // Split text into sentences and find those with character name + action verbs
-    const sentences = searchText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-    
-    for (const sentence of sentences) {
-      // Check if sentence contains character name and an action verb
-      if (sentence.includes(character.name)) {
-        const hasActionVerb = actionVerbs.some(verb => {
-          const verbPattern = new RegExp(`\\b${verb}\\b`, 'i');
-          return verbPattern.test(sentence);
-        });
+      // Determine the text section to search
+      const searchText = context 
+        ? this.novelText.substring(context.startPosition, context.endPosition)
+        : this.novelText;
+      
+      // Validate search text is not empty
+      if (!searchText || searchText.trim().length === 0) {
+        console.warn(`⚠️  Empty search text for character ${character.name}`);
+        return [];
+      }
 
-        if (hasActionVerb && sentence.length >= 20 && sentence.length <= 200) {
-          // Add period back if not present
-          const completeSentence = sentence.endsWith('.') || sentence.endsWith('!') || sentence.endsWith('?')
-            ? sentence
-            : sentence + '.';
-          actionQuotes.push(completeSentence);
+      // Extract action descriptions using patterns
+      const actionQuotes: string[] = [];
+
+      // Common action verbs to look for
+      const actionVerbs = [
+        'walked', 'ran', 'entered', 'left', 'approached', 'turned', 'looked', 'gazed',
+        'stood', 'sat', 'rose', 'moved', 'stepped', 'hurried', 'rushed', 'paused',
+        'stopped', 'opened', 'closed', 'took', 'gave', 'held', 'placed', 'picked',
+        'smiled', 'laughed', 'frowned', 'nodded', 'shook', 'bowed', 'gestured',
+        'embraced', 'kissed', 'touched', 'reached', 'grasped', 'seized', 'released'
+      ];
+
+      // Pattern: Character + action verb + description
+      // Example: "Elizabeth walked slowly across the room, her mind troubled."
+      try {
+        const actionPattern = new RegExp(
+          `${this.escapeRegex(character.name)}\\s+(${actionVerbs.join('|')})\\s+([^.!?]{10,150}[.!?])`,
+          'gi'
+        );
+
+        let match;
+        while ((match = actionPattern.exec(searchText)) !== null) {
+          const fullMatch = match[0].trim();
+          if (fullMatch.length >= 20 && fullMatch.length <= 200) {
+            actionQuotes.push(fullMatch);
+          }
         }
+      } catch (error) {
+        console.warn(`⚠️  Error extracting actions with pattern for ${character.name}:`, error);
       }
+
+      // Pattern: Narrative sentences containing the character's name and action
+      // Split text into sentences and find those with character name + action verbs
+      try {
+        const sentences = searchText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        
+        for (const sentence of sentences) {
+          // Check if sentence contains character name and an action verb
+          if (sentence.includes(character.name)) {
+            const hasActionVerb = actionVerbs.some(verb => {
+              const verbPattern = new RegExp(`\\b${verb}\\b`, 'i');
+              return verbPattern.test(sentence);
+            });
+
+            if (hasActionVerb && sentence.length >= 20 && sentence.length <= 200) {
+              // Add period back if not present
+              const completeSentence = sentence.endsWith('.') || sentence.endsWith('!') || sentence.endsWith('?')
+                ? sentence
+                : sentence + '.';
+              actionQuotes.push(completeSentence);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️  Error extracting actions from sentences for ${character.name}:`, error);
+      }
+
+      // Remove duplicates
+      const uniqueQuotes = Array.from(new Set(actionQuotes));
+
+      // Cache the results
+      this.actionCache.set(cacheKey, uniqueQuotes);
+      
+      // Log if no quotes found
+      if (uniqueQuotes.length === 0) {
+        console.log(`ℹ️  No action quotes found for ${character.name} in the specified context`);
+      }
+
+      return uniqueQuotes;
+    } catch (error) {
+      // Requirement 12.7: Handle extraction errors gracefully
+      console.error(`❌ Error extracting actions for ${character.name}:`, error);
+      return []; // Return empty array to allow fallback to LLM
     }
-
-    // Remove duplicates
-    const uniqueQuotes = Array.from(new Set(actionQuotes));
-
-    // Cache the results
-    this.actionCache.set(cacheKey, uniqueQuotes);
-
-    return uniqueQuotes;
   }
 
   /**
@@ -431,19 +499,40 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
   /**
    * Check how well a quote supports the target ending
    * Requirements 3.2, 3.3, 3.4: Score compatibility with original/opposite/random endings
+   * Requirement 12.7: Handle LLM failures gracefully
    */
   async checkEndingCompatibility(quote: string, targetEnding: StoryEnding): Promise<CompatibilityScore> {
-    // For original endings, all quotes are compatible
-    if (targetEnding.type === 'original') {
-      return {
-        score: 10,
-        reasoning: 'Quote is from the original novel and naturally supports the original ending',
-        shouldUse: true
-      };
-    }
-    
-    // For opposite and random endings, use LLM to assess compatibility
-    const prompt = `You are analyzing whether a quote from a novel supports a specific story ending.
+    try {
+      // Validate inputs
+      if (!quote || quote.trim().length === 0) {
+        console.warn('⚠️  Empty quote provided to checkEndingCompatibility');
+        return {
+          score: 5,
+          reasoning: 'Empty quote provided',
+          shouldUse: true
+        };
+      }
+      
+      if (!targetEnding || !targetEnding.type) {
+        console.warn('⚠️  Invalid target ending provided to checkEndingCompatibility');
+        return {
+          score: 5,
+          reasoning: 'Invalid target ending',
+          shouldUse: true
+        };
+      }
+      
+      // For original endings, all quotes are compatible
+      if (targetEnding.type === 'original') {
+        return {
+          score: 10,
+          reasoning: 'Quote is from the original novel and naturally supports the original ending',
+          shouldUse: true
+        };
+      }
+      
+      // For opposite and random endings, use LLM to assess compatibility
+      const prompt = `You are analyzing whether a quote from a novel supports a specific story ending.
 
 Quote: "${quote}"
 
@@ -467,8 +556,15 @@ Respond with ONLY valid JSON in this exact format:
   "shouldUse": <true if score >= 5, false otherwise>
 }`;
 
-    try {
-      const response = await this.llmService.generateContent(prompt, {});
+      // Set timeout for LLM call
+      const timeoutMs = 15000; // 15 seconds
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('LLM call timeout')), timeoutMs);
+      });
+      
+      const llmPromise = this.llmService.generateContent(prompt, {});
+      
+      const response = await Promise.race([llmPromise, timeoutPromise]);
       
       // Clean up response - remove markdown code blocks if present
       let cleanedResponse = response.trim();
@@ -502,11 +598,14 @@ Respond with ONLY valid JSON in this exact format:
       
       return result;
     } catch (error) {
-      console.warn('Failed to check ending compatibility:', error);
+      // Requirement 12.7: Handle LLM failures gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`⚠️  Failed to check ending compatibility: ${errorMessage}`);
+      
       // Default to neutral compatibility on error
       return {
         score: 5,
-        reasoning: 'Unable to assess compatibility due to error',
+        reasoning: `Unable to assess compatibility due to error: ${errorMessage}`,
         shouldUse: true
       };
     }

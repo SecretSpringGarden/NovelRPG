@@ -307,7 +307,7 @@ This implementation plan breaks down the game improvements into discrete, manage
     - **Validates: Requirements 2.5**
     - Test that CSV, JSON, and text reports are generated
 
-- [-] 9. Phase 8: Ending Variation Test Framework
+- [x] 9. Phase 8: Ending Variation Test Framework
   - [x] 9.1 Create EndingVariationTestFramework class
     - Create `src/testing/EndingVariationTestFramework.ts`
     - Define EndingVariationTestConfig and EndingVariationReport interfaces
@@ -337,30 +337,30 @@ This implementation plan breaks down the game improvements into discrete, manage
     - One game per ending type
     - _Requirements: 3.5, 6.1_
   
-  - [ ] 9.6 Implement cohesion analysis for each game
+  - [x] 9.6 Implement cohesion analysis for each game
     - Use existing CohesionRanker for each game
     - Store cohesion scores in results
     - _Requirements: 3.6_
   
-  - [ ] 9.7 Implement comparative report generation
+  - [x] 9.7 Implement comparative report generation
     - Generate report comparing all three ending types
     - Include cohesion scores, word counts, quote usage stats
     - Identify which ending type achieved highest cohesion
     - Generate CSV, JSON, and text formats
     - _Requirements: 3.7, 3.8_
   
-  - [ ] 9.8 Implement individual game state file creation
+  - [x] 9.8 Implement individual game state file creation
     - Save separate game state file for each ending variation
     - Include ending type in filename
     - _Requirements: 3.9_
   
-  - [ ] 9.9 Add configuration validation
+  - [x] 9.9 Add configuration validation
     - Validate round count is 1-20
     - Validate quote percentage is 0-100
     - Use defaults when not specified
     - _Requirements: 4.2, 4.3, 4.5_
   
-  - [ ] 9.10 Create CLI script for ending variation tests
+  - [x] 9.10 Create CLI script for ending variation tests
     - Create `run-ending-variation-test.ts` in project root
     - Accept command-line arguments for novel file and rounds
     - Display usage instructions
@@ -397,39 +397,39 @@ This implementation plan breaks down the game improvements into discrete, manage
     - Test that effective quote percentage is lower for non-original endings
     - Test that adjustments are tracked
 
-- [ ] 10. Checkpoint - Test Frameworks Complete
+- [x] 10. Checkpoint - Test Frameworks Complete
   - Ensure all tests pass
   - Run conclusion test on small novel
   - Run ending variation test on small novel
   - Verify reports are generated correctly
   - Ask the user if questions arise
 
-- [ ] 11. Phase 9: Configuration and Error Handling
-  - [ ] 11.1 Add comprehensive input validation
+- [x] 11. Phase 9: Configuration and Error Handling
+  - [x] 11.1 Add comprehensive input validation
     - Validate all configuration parameters
     - Provide clear error messages
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
   
-  - [ ] 11.2 Implement error handling for book quote extraction
+  - [x] 11.2 Implement error handling for book quote extraction
     - Handle no quotes found gracefully
     - Handle extraction timeouts
     - Handle invalid quote formats
     - _Requirements: 12.7_
   
-  - [ ] 11.3 Implement error handling for action choice system
+  - [x] 11.3 Implement error handling for action choice system
     - Handle LLM failures in option generation
     - Handle player timeouts
     - Handle invalid selections
     - _Requirements: 11.1, 11.2, 11.3_
   
-  - [ ] 11.4 Implement error handling for test frameworks
+  - [x] 11.4 Implement error handling for test frameworks
     - Handle analysis failures in iterations
     - Handle scoring failures
     - Handle report generation failures
     - Continue with remaining tests on error
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
   
-  - [ ] 11.5 Add comprehensive logging
+  - [x] 11.5 Add comprehensive logging
     - Log test configuration at start
     - Log progress for each iteration/game
     - Log detailed error information
