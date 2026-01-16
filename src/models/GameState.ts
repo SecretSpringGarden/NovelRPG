@@ -49,6 +49,12 @@ export interface StorySegment {
   playerId: string; // Player ID for reference
   contentSource: 'book_quote' | 'llm_generated'; // Clear marking of source
   bookQuoteMetadata?: BookQuoteMetadata; // Additional quote information if book quote
+  dialogueContext?: { // NEW: Book section used for this round
+    chapterNumber?: number;
+    sceneDescription: string;
+    startPosition: number;
+    endPosition: number;
+  };
 }
 
 /**

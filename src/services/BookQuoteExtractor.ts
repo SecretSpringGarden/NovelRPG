@@ -36,6 +36,8 @@ export interface BookQuoteExtractor {
   validateQuoteForCharacter(quote: string, character: Character): boolean;
   checkEndingCompatibility(quote: string, targetEnding: StoryEnding): Promise<CompatibilityScore>;
   shouldUseBookQuote(quotePercentage: number, targetEnding: StoryEnding, endingType: string): boolean;
+  extractContextualQuotesForRound(characters: Character[], context: DialogueContext, targetEnding?: StoryEnding): Promise<Map<string, { dialogue: string[], actions: string[] }>>;
+  expandContextForMissingCharacters(characters: Character[], context: DialogueContext, targetEnding?: StoryEnding): Promise<{ expandedContext: DialogueContext, quotesMap: Map<string, { dialogue: string[], actions: string[] }> }>; // NEW
 }
 
 /**
@@ -222,6 +224,9 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
    * Find dialogue context for a given round
    * Requirement 13.1: Identify book sections based on round progression
    * Requirement 13.5: Return context with chapter/scene information
+   * 
+   * Enhanced to identify coherent scenes by looking for chapter boundaries
+   * and scene markers, mapping rounds progressively through the novel
    */
   async findDialogueContext(round: number, totalRounds: number): Promise<DialogueContext> {
     // Calculate the position in the novel based on round progression
@@ -236,35 +241,88 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
     const contextWindowSize = Math.min(Math.floor(novelLength * 0.1), 50000);
     const halfWindow = Math.floor(contextWindowSize / 2);
     
-    // Calculate start and end positions
+    // Calculate initial start and end positions
     let startPosition = Math.max(0, centerPosition - halfWindow);
     let endPosition = Math.min(novelLength, centerPosition + halfWindow);
     
-    // Adjust to sentence boundaries for cleaner extraction
-    // Find the start of the first complete sentence
-    if (startPosition > 0) {
-      const nextSentenceStart = this.novelText.indexOf('. ', startPosition);
-      if (nextSentenceStart !== -1 && nextSentenceStart < startPosition + 500) {
-        startPosition = nextSentenceStart + 2; // Skip the period and space
+    // Try to find chapter boundaries for more coherent scenes
+    // Look for chapter markers near the start position
+    const chapterPattern = /Chapter\s+\d+|CHAPTER\s+[IVXLCDM]+|\n\n[IVXLCDM]+\.\s/gi;
+    
+    // Search for chapter start before our start position (within 5000 chars)
+    const searchStart = Math.max(0, startPosition - 5000);
+    const beforeText = this.novelText.substring(searchStart, startPosition + 1000);
+    const chapterMatches = Array.from(beforeText.matchAll(chapterPattern));
+    
+    if (chapterMatches.length > 0) {
+      // Use the last chapter marker found before our position
+      const lastChapterMatch = chapterMatches[chapterMatches.length - 1];
+      const chapterStartInSearch = lastChapterMatch.index!;
+      const actualChapterStart = searchStart + chapterStartInSearch;
+      
+      // If the chapter start is reasonably close, use it as our start position
+      if (actualChapterStart >= startPosition - 3000 && actualChapterStart < startPosition + 1000) {
+        startPosition = actualChapterStart;
       }
     }
     
-    // Find the end of the last complete sentence
+    // Look for scene breaks (paragraph breaks, section markers)
+    // Adjust to paragraph boundaries for cleaner extraction
+    if (startPosition > 0) {
+      // Look for double newline (paragraph break) or sentence end
+      const paragraphBreak = this.novelText.indexOf('\n\n', startPosition);
+      const sentenceEnd = this.novelText.indexOf('. ', startPosition);
+      
+      if (paragraphBreak !== -1 && paragraphBreak < startPosition + 500) {
+        startPosition = paragraphBreak + 2; // Skip the newlines
+      } else if (sentenceEnd !== -1 && sentenceEnd < startPosition + 500) {
+        startPosition = sentenceEnd + 2; // Skip the period and space
+      }
+    }
+    
+    // Find the end of a coherent scene
     if (endPosition < novelLength) {
-      const lastSentenceEnd = this.novelText.lastIndexOf('. ', endPosition);
-      if (lastSentenceEnd !== -1 && lastSentenceEnd > endPosition - 500) {
-        endPosition = lastSentenceEnd + 1; // Include the period
+      // Look for chapter boundary, scene break, or paragraph break
+      const nextChapterMatch = this.novelText.substring(endPosition - 1000, endPosition + 5000).match(chapterPattern);
+      
+      if (nextChapterMatch && nextChapterMatch.index !== undefined) {
+        const nextChapterPos = endPosition - 1000 + nextChapterMatch.index;
+        if (nextChapterPos > endPosition && nextChapterPos < endPosition + 3000) {
+          // End before the next chapter starts
+          endPosition = nextChapterPos - 1;
+        }
+      }
+      
+      // Otherwise, find paragraph or sentence boundary
+      const paragraphBreak = this.novelText.lastIndexOf('\n\n', endPosition);
+      const sentenceEnd = this.novelText.lastIndexOf('. ', endPosition);
+      
+      if (paragraphBreak !== -1 && paragraphBreak > endPosition - 500) {
+        endPosition = paragraphBreak;
+      } else if (sentenceEnd !== -1 && sentenceEnd > endPosition - 500) {
+        endPosition = sentenceEnd + 1; // Include the period
       }
     }
     
     // Extract the context text
     const contextText = this.novelText.substring(startPosition, endPosition);
     
-    // Try to identify chapter number
+    // Try to identify chapter number with multiple patterns
     let chapterNumber: number | undefined;
-    const chapterMatch = contextText.match(/Chapter\s+(\d+)/i);
-    if (chapterMatch) {
-      chapterNumber = parseInt(chapterMatch[1], 10);
+    
+    // Pattern 1: "Chapter 5" or "CHAPTER 5"
+    const chapterNumMatch = contextText.match(/Chapter\s+(\d+)/i);
+    if (chapterNumMatch) {
+      chapterNumber = parseInt(chapterNumMatch[1], 10);
+    }
+    
+    // Pattern 2: Roman numerals "Chapter V" or "V."
+    if (!chapterNumber) {
+      const romanMatch = contextText.match(/Chapter\s+([IVXLCDM]+)|^([IVXLCDM]+)\./im);
+      if (romanMatch) {
+        const romanNumeral = romanMatch[1] || romanMatch[2];
+        chapterNumber = this.romanToInt(romanNumeral);
+      }
     }
     
     // Identify which characters appear in this context
@@ -275,20 +333,30 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
       }
     }
     
-    // Generate scene description based on position in novel
+    // Generate detailed scene description based on position and content
     let sceneDescription: string;
-    if (progressPercentage < 0.25) {
-      sceneDescription = 'Early section of the novel';
-    } else if (progressPercentage < 0.5) {
-      sceneDescription = 'First half of the novel';
-    } else if (progressPercentage < 0.75) {
-      sceneDescription = 'Second half of the novel';
+    if (progressPercentage < 0.2) {
+      sceneDescription = 'Opening section of the novel';
+    } else if (progressPercentage < 0.4) {
+      sceneDescription = 'Early-middle section of the novel';
+    } else if (progressPercentage < 0.6) {
+      sceneDescription = 'Middle section of the novel';
+    } else if (progressPercentage < 0.8) {
+      sceneDescription = 'Late-middle section of the novel';
     } else {
-      sceneDescription = 'Later section of the novel';
+      sceneDescription = 'Concluding section of the novel';
     }
     
     if (chapterNumber) {
-      sceneDescription += ` (around Chapter ${chapterNumber})`;
+      sceneDescription += ` (Chapter ${chapterNumber})`;
+    }
+    
+    // Add character presence information
+    if (availableCharacters.length > 0) {
+      sceneDescription += ` - Features: ${availableCharacters.slice(0, 3).join(', ')}`;
+      if (availableCharacters.length > 3) {
+        sceneDescription += ` and ${availableCharacters.length - 3} more`;
+      }
     }
     
     return {
@@ -298,6 +366,29 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
       sceneDescription,
       availableCharacters
     };
+  }
+
+  /**
+   * Helper method to convert Roman numerals to integers
+   */
+  private romanToInt(roman: string): number {
+    const romanMap: { [key: string]: number } = {
+      'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000
+    };
+    
+    let result = 0;
+    for (let i = 0; i < roman.length; i++) {
+      const current = romanMap[roman[i]];
+      const next = romanMap[roman[i + 1]];
+      
+      if (next && current < next) {
+        result -= current;
+      } else {
+        result += current;
+      }
+    }
+    
+    return result;
   }
 
   /**
@@ -475,6 +566,177 @@ Respond with ONLY valid JSON in this exact format:
         console.warn(`Unknown ending type: ${targetEnding.type}, using default behavior`);
         return randomValue < quotePercentage;
     }
+  }
+
+  /**
+   * Extract contextual quotes for all characters in a round from the same book section
+   * Requirements 13.2, 13.3: Prefer quotes from same context for all characters in a round
+   * 
+   * This method attempts to extract dialogue and actions for all characters from the
+   * same dialogue context (scene/chapter), ensuring conversations feel natural and
+   * contextually related.
+   */
+  async extractContextualQuotesForRound(
+    characters: Character[],
+    context: DialogueContext,
+    targetEnding?: StoryEnding
+  ): Promise<Map<string, { dialogue: string[], actions: string[] }>> {
+    const quotesMap = new Map<string, { dialogue: string[], actions: string[] }>();
+    
+    // Extract quotes for each character from the same context
+    for (const character of characters) {
+      // Only extract for characters that appear in this context
+      if (context.availableCharacters.includes(character.name)) {
+        const dialogue = await this.extractCharacterDialogue(character, context, targetEnding);
+        const actions = await this.extractCharacterActions(character, context, targetEnding);
+        
+        quotesMap.set(character.id, {
+          dialogue,
+          actions
+        });
+      } else {
+        // Character not in this context, return empty arrays
+        quotesMap.set(character.id, {
+          dialogue: [],
+          actions: []
+        });
+      }
+    }
+    
+    return quotesMap;
+  }
+
+  /**
+   * Expand context when not all characters have quotes available
+   * Requirement 13.4: When context doesn't have quotes for all characters, expand search
+   * 
+   * This method progressively expands the dialogue context to find quotes for
+   * characters that weren't found in the initial context. If expansion fails,
+   * it returns empty arrays, allowing the caller to fall back to LLM generation.
+   */
+  async expandContextForMissingCharacters(
+    characters: Character[],
+    context: DialogueContext,
+    targetEnding?: StoryEnding
+  ): Promise<{ expandedContext: DialogueContext, quotesMap: Map<string, { dialogue: string[], actions: string[] }> }> {
+    
+    // First, try to extract quotes from the original context
+    let quotesMap = await this.extractContextualQuotesForRound(characters, context, targetEnding);
+    
+    // Check which characters are missing quotes
+    const missingCharacters: Character[] = [];
+    for (const character of characters) {
+      const quotes = quotesMap.get(character.id);
+      if (!quotes || (quotes.dialogue.length === 0 && quotes.actions.length === 0)) {
+        missingCharacters.push(character);
+      }
+    }
+    
+    // If all characters have quotes, return the original context
+    if (missingCharacters.length === 0) {
+      return { expandedContext: context, quotesMap };
+    }
+    
+    console.log(`⚠️  Context expansion: ${missingCharacters.length} character(s) missing quotes`);
+    console.log(`   Missing: ${missingCharacters.map(c => c.name).join(', ')}`);
+    
+    // Try expanding the context in multiple steps
+    const expansionSteps = [
+      { multiplier: 1.5, description: '50% expansion' },
+      { multiplier: 2.0, description: '100% expansion' },
+      { multiplier: 3.0, description: '200% expansion' }
+    ];
+    
+    let expandedContext = context;
+    
+    for (const step of expansionSteps) {
+      // Calculate expanded window
+      const originalSize = context.endPosition - context.startPosition;
+      const expandedSize = Math.floor(originalSize * step.multiplier);
+      const additionalSize = expandedSize - originalSize;
+      const halfAdditional = Math.floor(additionalSize / 2);
+      
+      // Expand symmetrically around the original context
+      const newStartPosition = Math.max(0, context.startPosition - halfAdditional);
+      const newEndPosition = Math.min(this.novelText.length, context.endPosition + halfAdditional);
+      
+      // Adjust to paragraph boundaries
+      let adjustedStart = newStartPosition;
+      let adjustedEnd = newEndPosition;
+      
+      if (adjustedStart > 0) {
+        const paragraphBreak = this.novelText.indexOf('\n\n', adjustedStart);
+        if (paragraphBreak !== -1 && paragraphBreak < adjustedStart + 500) {
+          adjustedStart = paragraphBreak + 2;
+        }
+      }
+      
+      if (adjustedEnd < this.novelText.length) {
+        const paragraphBreak = this.novelText.lastIndexOf('\n\n', adjustedEnd);
+        if (paragraphBreak !== -1 && paragraphBreak > adjustedEnd - 500) {
+          adjustedEnd = paragraphBreak;
+        }
+      }
+      
+      // Create expanded context
+      const expandedContextText = this.novelText.substring(adjustedStart, adjustedEnd);
+      
+      // Update available characters
+      const availableCharacters: string[] = [];
+      for (const character of this.novelAnalysis.mainCharacters) {
+        if (expandedContextText.includes(character.name)) {
+          availableCharacters.push(character.name);
+        }
+      }
+      
+      expandedContext = {
+        startPosition: adjustedStart,
+        endPosition: adjustedEnd,
+        chapterNumber: context.chapterNumber,
+        sceneDescription: `${context.sceneDescription} (expanded: ${step.description})`,
+        availableCharacters
+      };
+      
+      console.log(`   Trying ${step.description}...`);
+      
+      // Try to extract quotes for missing characters from expanded context
+      for (const character of missingCharacters) {
+        if (expandedContext.availableCharacters.includes(character.name)) {
+          const dialogue = await this.extractCharacterDialogue(character, expandedContext, targetEnding);
+          const actions = await this.extractCharacterActions(character, expandedContext, targetEnding);
+          
+          // Update quotes map if we found any quotes
+          if (dialogue.length > 0 || actions.length > 0) {
+            quotesMap.set(character.id, { dialogue, actions });
+            console.log(`   ✅ Found quotes for ${character.name}`);
+          }
+        }
+      }
+      
+      // Check if we now have quotes for all characters
+      const stillMissing = characters.filter(character => {
+        const quotes = quotesMap.get(character.id);
+        return !quotes || (quotes.dialogue.length === 0 && quotes.actions.length === 0);
+      });
+      
+      if (stillMissing.length === 0) {
+        console.log(`   ✅ All characters now have quotes after ${step.description}`);
+        return { expandedContext, quotesMap };
+      }
+    }
+    
+    // If we still have missing characters after all expansions, log it
+    const finalMissing = characters.filter(character => {
+      const quotes = quotesMap.get(character.id);
+      return !quotes || (quotes.dialogue.length === 0 && quotes.actions.length === 0);
+    });
+    
+    if (finalMissing.length > 0) {
+      console.log(`   ⚠️  After all expansions, ${finalMissing.length} character(s) still missing quotes`);
+      console.log(`   Will fall back to LLM generation for: ${finalMissing.map(c => c.name).join(', ')}`);
+    }
+    
+    return { expandedContext, quotesMap };
   }
 }
 

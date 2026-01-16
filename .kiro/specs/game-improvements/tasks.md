@@ -126,38 +126,38 @@ This implementation plan breaks down the game improvements into discrete, manage
     - Test that all content is marked as book_quote or llm_generated
     - Test that book quotes include metadata
 
-- [ ] 4. Phase 4: Action Choice System
-  - [ ] 4.1 Create ActionChoiceManager component
+- [x] 4. Phase 4: Action Choice System
+  - [x] 4.1 Create ActionChoiceManager component
     - Create `src/services/ActionChoiceManager.ts` with interface
     - Define ActionOptions and PlayerChoice interfaces
     - _Requirements: 11.1_
   
-  - [ ] 4.2 Implement action option generation
+  - [x] 4.2 Implement action option generation
     - Add `generateActionOptions()` method
     - Generate both talk and act options using LLM
     - Apply book quote percentage and ending compatibility
     - Mark content source clearly
     - _Requirements: 11.1, 11.3, 12.2, 12.3_
   
-  - [ ] 4.3 Implement player selection flow
+  - [x] 4.3 Implement player selection flow
     - Add `presentOptionsToPlayer()` method
     - For human players: display options and wait for input
     - For computer players: randomly select from three options
     - _Requirements: 11.2, 11.3, 11.5_
   
-  - [ ] 4.4 Implement choice application
+  - [x] 4.4 Implement choice application
     - Add `applyPlayerChoice()` method
     - Record selected action with content source
     - Generate story segment with proper metadata
     - _Requirements: 11.4_
   
-  - [ ] 4.5 Integrate with GameManager
+  - [x] 4.5 Integrate with GameManager
     - Add `processPlayerTurnWithChoice()` method to GameManager
     - Replace old dice-roll logic with action choice system
     - Maintain backward compatibility
     - _Requirements: 11.1, 11.4_
   
-  - [ ] 4.6 Update TestFramework for random selection
+  - [x] 4.6 Update TestFramework for random selection
     - Modify `createPlayerAction()` to randomly select from options
     - Ensure computer players use new action choice system
     - _Requirements: 11.5_
@@ -182,30 +182,30 @@ This implementation plan breaks down the game improvements into discrete, manage
     - **Validates: Requirements 11.6**
     - Test that "do nothing" increases round count by 1
 
-- [ ] 5. Checkpoint - Core Features Complete
+- [x] 5. Checkpoint - Core Features Complete
   - Ensure all tests pass
   - Verify character names display correctly
   - Verify book quotes are extracted and used
   - Verify action choice system works
   - Ask the user if questions arise
 
-- [ ] 6. Phase 5: Contextual Dialogue Grouping
-  - [ ] 6.1 Implement dialogue context identification
+- [x] 6. Phase 5: Contextual Dialogue Grouping
+  - [x] 6.1 Implement dialogue context identification
     - Enhance `findDialogueContext()` to identify coherent scenes
     - Map rounds to book sections progressively
     - _Requirements: 13.1_
   
-  - [ ] 6.2 Implement contextual quote grouping
+  - [x] 6.2 Implement contextual quote grouping
     - Modify quote extraction to prefer same context for all characters in a round
     - Extract quotes from same chapter/scene when possible
     - _Requirements: 13.2, 13.3_
   
-  - [ ] 6.3 Implement context expansion fallback
+  - [x] 6.3 Implement context expansion fallback
     - When context doesn't have quotes for all characters, expand search
     - Fall back to LLM generation if expansion fails
     - _Requirements: 13.4_
   
-  - [ ] 6.4 Add context logging
+  - [x] 6.4 Add context logging
     - Log which book section is used for each round
     - Include in game state files
     - _Requirements: 13.5_

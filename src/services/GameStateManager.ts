@@ -258,6 +258,7 @@ Filename: ${metadata.filename}
 
   /**
    * Formats complete game state for file output
+   * Requirement 13.5: Include dialogue context in game state files
    */
   private formatCompleteGameState(gameState: GameState): string {
     return `
@@ -267,6 +268,8 @@ Total Rounds: ${gameState.totalRounds}
 Players: ${gameState.players.length}
 Story Segments: ${gameState.storySegments.length}
 Target Ending: ${gameState.targetEnding?.id || 'None'}
+Quote Percentage: ${gameState.quotePercentage}%
+Effective Quote Percentage: ${gameState.effectiveQuotePercentage.toFixed(1)}%
 
 === NOVEL ANALYSIS ===
 Characters: ${gameState.novelAnalysis.mainCharacters.map(c => c.name).join(', ')}
@@ -278,8 +281,29 @@ ${gameState.storySegments.map((segment, index) => {
   const characterInfo = segment.characterName 
     ? `${segment.characterName} (Player ${segment.playerId})` 
     : `Player ${segment.playerId}`;
-  return `Segment ${index + 1} - ${characterInfo} (${segment.wordCount} words): ${segment.content.substring(0, 100)}...`;
-}).join('\n')}
+  
+  // Include dialogue context information if available
+  let contextInfo = '';
+  if (segment.dialogueContext) {
+    contextInfo = `\n  Context: ${segment.dialogueContext.sceneDescription}`;
+    if (segment.dialogueContext.chapterNumber) {
+      contextInfo += ` (Chapter ${segment.dialogueContext.chapterNumber})`;
+    }
+  }
+  
+  // Include content source information
+  const sourceInfo = segment.contentSource === 'book_quote' ? ' [Book Quote]' : ' [LLM Generated]';
+  
+  return `Segment ${index + 1} - ${characterInfo}${sourceInfo} (${segment.wordCount} words)${contextInfo}\n  ${segment.content.substring(0, 150)}${segment.content.length > 150 ? '...' : ''}`;
+}).join('\n\n')}
+
+=== QUOTE USAGE STATISTICS ===
+Total Actions: ${gameState.quoteUsageStats.totalActions}
+Book Quotes Used: ${gameState.quoteUsageStats.bookQuotesUsed}
+LLM Generated: ${gameState.quoteUsageStats.llmGeneratedUsed}
+Configured Percentage: ${gameState.quoteUsageStats.configuredPercentage}%
+Actual Percentage: ${gameState.quoteUsageStats.actualPercentage.toFixed(1)}%
+Ending Compatibility Adjustments: ${gameState.quoteUsageStats.endingCompatibilityAdjustments}
 
 === END GAME STATE ===
 `;
