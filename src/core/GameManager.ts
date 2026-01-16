@@ -320,6 +320,24 @@ export class GameManager {
   }
 
   /**
+   * Gets the display name for a player, including character name if assigned
+   * Returns "Character Name (Player X)" if character is assigned, otherwise "Player X"
+   */
+  getPlayerDisplayName(playerId: string): string {
+    const player = this.getPlayerById(playerId);
+    
+    if (!player) {
+      return `Player ${playerId}`;
+    }
+    
+    if (player.character && player.character.name) {
+      return `${player.character.name} (Player ${playerId})`;
+    }
+    
+    return `Player ${playerId}`;
+  }
+
+  /**
    * Processes a player's turn and generates appropriate story content
    */
   async processPlayerTurn(playerId: string, action: PlayerAction): Promise<StorySegment> {
@@ -350,13 +368,16 @@ export class GameManager {
       this.gameStateManager.saveGameEvent(roundEvent);
       
       // Create empty story segment for "do nothing"
-      const characterName = actingPlayer.character?.name || `Player ${playerId}`;
+      const characterName = actingPlayer.character?.name;
+      const displayName = this.getPlayerDisplayName(playerId);
       const storySegment: StorySegment = {
-        content: `${characterName} chose to do nothing. Total rounds increased to ${updatedGameState.totalRounds}.`,
+        content: `${displayName} chose to do nothing. Total rounds increased to ${updatedGameState.totalRounds}.`,
         wordCount: 0,
         generatedBy: action,
         targetEnding: gameState.targetEnding?.id || 'none',
-        timestamp: new Date()
+        timestamp: new Date(),
+        characterName,
+        playerId
       };
       
       gameState.storySegments.push(storySegment);
@@ -393,7 +414,9 @@ export class GameManager {
       wordCount: this.countWords(content),
       generatedBy: action,
       targetEnding: gameState.targetEnding.id,
-      timestamp: new Date()
+      timestamp: new Date(),
+      characterName: actingPlayer.character?.name,
+      playerId
     };
 
     // Add to game state and save

@@ -218,6 +218,11 @@ export class TestFramework {
         // Create player action based on dice roll
         const playerAction = this.createPlayerAction(player.id, diceRoll);
         
+        // Get player display name for logging
+        const displayName = this.gameManager.getPlayerDisplayName(player.id);
+        const actionType = playerAction.type;
+        console.log(`🎲 ${displayName} rolled ${diceRoll} → ${actionType}`);
+        
         // Process the action through game manager (this may call LLM)
         try {
           await this.gameManager.processPlayerTurn(player.id, playerAction);

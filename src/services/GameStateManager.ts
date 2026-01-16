@@ -237,7 +237,21 @@ Filename: ${metadata.filename}
    */
   private formatGameEvent(event: GameEvent): string {
     const timestamp = event.timestamp.toISOString();
-    const playerInfo = event.playerId ? ` (Player: ${event.playerId})` : '';
+    
+    // Try to extract character name from event data if available
+    let playerInfo = '';
+    if (event.playerId) {
+      // Check if event data contains character information
+      if (event.data && event.data.storySegment && event.data.storySegment.characterName) {
+        const characterName = event.data.storySegment.characterName;
+        playerInfo = ` (${characterName} - Player ${event.playerId})`;
+      } else if (event.data && event.data.action && event.data.action.characterName) {
+        const characterName = event.data.action.characterName;
+        playerInfo = ` (${characterName} - Player ${event.playerId})`;
+      } else {
+        playerInfo = ` (Player ${event.playerId})`;
+      }
+    }
     
     return `[${timestamp}] ${event.type.toUpperCase()}${playerInfo}: ${JSON.stringify(event.data)}\n`;
   }
@@ -260,9 +274,12 @@ Plot Points: ${gameState.novelAnalysis.plotPoints.length}
 Analysis Complete: ${gameState.novelAnalysis.isComplete}
 
 === STORY SEGMENTS ===
-${gameState.storySegments.map((segment, index) => 
-  `Segment ${index + 1} (${segment.wordCount} words): ${segment.content.substring(0, 100)}...`
-).join('\n')}
+${gameState.storySegments.map((segment, index) => {
+  const characterInfo = segment.characterName 
+    ? `${segment.characterName} (Player ${segment.playerId})` 
+    : `Player ${segment.playerId}`;
+  return `Segment ${index + 1} - ${characterInfo} (${segment.wordCount} words): ${segment.content.substring(0, 100)}...`;
+}).join('\n')}
 
 === END GAME STATE ===
 `;

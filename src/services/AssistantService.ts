@@ -352,6 +352,12 @@ export class OpenAIAssistantService implements AssistantService {
           await this.waitForVectorStoreReady(vectorStoreId, operationId);
           tracker.completeStep(operationId, 'wait_ready');
           console.log(`✅ Vector store is ready: ${vectorStoreId}`);
+          
+          // Additional wait for file indexing to complete
+          // Even after vector store reports "ready", file search indexing may still be in progress
+          console.log('⏳ Waiting 10 seconds for file search indexing to complete...');
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          console.log('✅ File search indexing should be complete');
 
           // Step 2: Create assistant with retry logic
           tracker.startStep(operationId, 'assistant');

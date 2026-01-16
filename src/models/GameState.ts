@@ -34,6 +34,8 @@ export interface StorySegment {
   generatedBy: PlayerAction;
   targetEnding: string;
   timestamp: Date;
+  characterName?: string; // Character who performed the action
+  playerId: string; // Player ID for reference
 }
 
 /**
@@ -127,6 +129,17 @@ export function validateStorySegment(segment: any): segment is StorySegment {
   }
 
   if (typeof segment.targetEnding !== 'string' || segment.targetEnding.trim() === '') {
+    return false;
+  }
+
+  // Check playerId is a non-empty string
+  if (typeof segment.playerId !== 'string' || segment.playerId.trim() === '') {
+    return false;
+  }
+
+  // Check characterName is optional but if present, must be a non-empty string
+  if (segment.characterName !== undefined && 
+      (typeof segment.characterName !== 'string' || segment.characterName.trim() === '')) {
     return false;
   }
 
