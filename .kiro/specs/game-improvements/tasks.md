@@ -225,17 +225,17 @@ This implementation plan breaks down the game improvements into discrete, manage
     - **Validates: Requirements 13.4**
     - Test that system handles missing quotes gracefully
 
-- [ ] 7. Phase 6: Enhanced Turn Display
-  - [ ] 7.1 Update turn selection display format
+- [x] 7. Phase 6: Enhanced Turn Display
+  - [x] 7.1 Update turn selection display format
     - Modify display to show "Character_Name (Player X) chose: [action]"
     - Handle case where no character assigned
     - _Requirements: 14.1, 14.4_
   
-  - [ ] 7.2 Update turn logging to game state files
+  - [x] 7.2 Update turn logging to game state files
     - Include both character name and player number in logs
     - _Requirements: 14.2_
   
-  - [ ] 7.3 Update turn history display
+  - [x] 7.3 Update turn history display
     - Show character names and player numbers for all past turns
     - _Requirements: 14.3_
   
@@ -244,44 +244,44 @@ This implementation plan breaks down the game improvements into discrete, manage
     - **Validates: Requirements 14.1, 14.2, 14.3**
     - Test format with and without character assignment
 
-- [ ] 8. Phase 7: Conclusion Test Framework
-  - [ ] 8.1 Create ConclusionTestFramework class
+- [x] 8. Phase 7: Conclusion Test Framework
+  - [x] 8.1 Create ConclusionTestFramework class
     - Create `src/testing/ConclusionTestFramework.ts`
     - Define ConclusionTestConfig and ConclusionTestReport interfaces
     - _Requirements: 2.1_
   
-  - [ ] 8.2 Implement multiple iteration execution
+  - [x] 8.2 Implement multiple iteration execution
     - Add `runConclusionTest()` method
     - Execute novel analysis N times (configurable)
     - Extract conclusion from each analysis
     - _Requirements: 2.1, 2.2_
   
-  - [ ] 8.3 Implement conclusion consistency scoring
+  - [x] 8.3 Implement conclusion consistency scoring
     - Add `analyzeConclusionConsistency()` method
     - Calculate pairwise similarity between conclusions
     - Use LLM or cosine similarity for comparison
     - Identify outliers
     - _Requirements: 2.3, 2.6, 2.7_
   
-  - [ ] 8.4 Implement conclusion quality scoring
+  - [x] 8.4 Implement conclusion quality scoring
     - Add `scoreConclusionQuality()` method using LLM
     - Score accuracy, completeness, coherence (1-10 each)
     - Provide reasoning for scores
     - _Requirements: 2.4_
   
-  - [ ] 8.5 Implement multi-format report generation
+  - [x] 8.5 Implement multi-format report generation
     - Generate CSV report with all metrics
     - Generate JSON report with complete data
     - Generate text table report for readability
     - _Requirements: 2.5_
   
-  - [ ] 8.6 Add configuration validation
+  - [x] 8.6 Add configuration validation
     - Validate iteration count is 1-10
     - Validate output directory exists or create it
     - Use defaults when not specified
     - _Requirements: 4.1, 4.4, 4.5_
   
-  - [ ] 8.7 Create CLI script for conclusion tests
+  - [x] 8.7 Create CLI script for conclusion tests
     - Create `run-conclusion-test.ts` in project root
     - Accept command-line arguments for novel file and iterations
     - Display usage instructions
