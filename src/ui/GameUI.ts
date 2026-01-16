@@ -170,13 +170,18 @@ export class GameUI {
 
   /**
    * Display player action based on dice roll
+   * Requirement 14.3: Show character names and player numbers for all past turns
    */
   displayPlayerAction(player: Player, action: PlayerAction): void {
-    const playerName = player.character?.name || player.id;
+    // Format character info: "Character_Name (Player X)" or "Player X"
+    const displayName = player.character?.name 
+      ? `${player.character.name} (Player ${player.id})` 
+      : `Player ${player.id}`;
+    
     const actionEmoji = this.getActionEmoji(action.type);
     const actionText = this.getActionText(action.type);
     
-    console.log(`${actionEmoji} ${playerName} chose to ${actionText} (rolled ${action.diceRoll})`);
+    console.log(`${actionEmoji} ${displayName} chose to ${actionText} (rolled ${action.diceRoll})`);
     
     if (action.type === 'nothing') {
       console.log('   ⏭️  Round count increased by 1');
@@ -185,13 +190,19 @@ export class GameUI {
 
   /**
    * Display generated story content
+   * Requirement 14.3: Show character names and player numbers for all past turns
    */
   displayStoryContent(segment: StorySegment): void {
     if (segment.generatedBy.type === 'nothing') {
       return; // Don't display content for "do nothing" actions
     }
 
-    console.log('\n📖 Story continues...');
+    // Format character info: "Character_Name (Player X)" or "Player X"
+    const characterInfo = segment.characterName 
+      ? `${segment.characterName} (Player ${segment.playerId})` 
+      : `Player ${segment.playerId}`;
+
+    console.log(`\n📖 Story continues... [${characterInfo}]`);
     console.log('─'.repeat(60));
     console.log(this.formatStoryText(segment.content));
     console.log('─'.repeat(60));

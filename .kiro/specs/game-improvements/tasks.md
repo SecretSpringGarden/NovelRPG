@@ -307,30 +307,30 @@ This implementation plan breaks down the game improvements into discrete, manage
     - **Validates: Requirements 2.5**
     - Test that CSV, JSON, and text reports are generated
 
-- [ ] 9. Phase 8: Ending Variation Test Framework
-  - [ ] 9.1 Create EndingVariationTestFramework class
+- [-] 9. Phase 8: Ending Variation Test Framework
+  - [x] 9.1 Create EndingVariationTestFramework class
     - Create `src/testing/EndingVariationTestFramework.ts`
     - Define EndingVariationTestConfig and EndingVariationReport interfaces
     - _Requirements: 3.1_
   
-  - [ ] 9.2 Implement original ending generation
+  - [x] 9.2 Implement original ending generation
     - Add `generateOriginalEnding()` method
     - Extract and use book's actual conclusion
     - _Requirements: 3.2_
   
-  - [ ] 9.3 Implement opposite ending generation
+  - [x] 9.3 Implement opposite ending generation
     - Add `generateOppositeEnding()` method using LLM
     - Invert the book's conclusion outcome
     - Ensure semantic opposition (happy → tragic, success → failure)
     - _Requirements: 3.3_
   
-  - [ ] 9.4 Implement random ending generation
+  - [x] 9.4 Implement random ending generation
     - Add `generateRandomEnding()` method using LLM
     - Create creative alternative unrelated to book's conclusion
     - Ensure distinctness from original and opposite
     - _Requirements: 3.4_
   
-  - [ ] 9.5 Implement three-game execution
+  - [x] 9.5 Implement three-game execution
     - Add `runEndingVariationTest()` method
     - Analyze novel once, reuse for all games
     - Run three games with 5 rounds each

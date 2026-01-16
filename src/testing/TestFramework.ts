@@ -252,25 +252,33 @@ export class TestFramework {
   }
 
   /**
-   * Creates player action based on dice roll according to game rules
+   * Creates player action based on random selection from action options
+   * Requirement 11.5: Computer players randomly select from three options
+   * Updated to use new action choice system instead of dice rolls
    */
   private createPlayerAction(playerId: string, diceRoll: number): any {
+    // Randomly select from three options: talk, act, or nothing
+    // This replaces the old dice-roll-based system
+    const randomChoice = Math.floor(Math.random() * 3);
+    
     let actionType: 'talk' | 'act' | 'nothing';
     
-    if (diceRoll % 2 === 0) {
-      // Even numbers (2,4,6,8,10) -> talk
-      actionType = 'talk';
-    } else if (diceRoll === 1 || diceRoll === 3 || diceRoll === 5) {
-      // 1, 3, 5 -> act
-      actionType = 'act';
-    } else {
-      // 7, 9 -> do nothing
-      actionType = 'nothing';
+    switch (randomChoice) {
+      case 0:
+        actionType = 'talk';
+        break;
+      case 1:
+        actionType = 'act';
+        break;
+      case 2:
+      default:
+        actionType = 'nothing';
+        break;
     }
     
     return {
       type: actionType,
-      diceRoll,
+      diceRoll, // Keep for backward compatibility, but not used in new system
       timestamp: new Date(),
       playerId,
       contentSource: 'llm_generated' // Default to LLM generated

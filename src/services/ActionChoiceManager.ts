@@ -272,13 +272,15 @@ Respond with ONLY the action description, nothing else.`;
    * Requirement 11.2: For human players, display options and wait for input
    * Requirement 11.3: For computer players, randomly select from three options
    * Requirement 11.5: Computer players use random selection
+   * Requirement 14.1: Display format "Character_Name (Player X) chose: [action]"
    */
   async presentOptionsToPlayer(player: Player, options: ActionOptions): Promise<PlayerChoice> {
-    const characterName = player.character?.name || `Player ${player.id}`;
+    // Requirement 14.1, 14.4: Format display name with character and player number
+    const displayName = this.getPlayerDisplayName(player);
     
     if (player.type === 'human') {
       // For human players: display options and wait for input
-      console.log(`\n🎭 ${characterName}'s Turn - Choose an action:`);
+      console.log(`\n🎭 ${displayName}'s Turn - Choose an action:`);
       console.log(`1. TALK: ${options.talkOption}`);
       console.log(`2. ACT: ${options.actOption}`);
       console.log(`3. DO NOTHING: ${options.doNothingOption}`);
@@ -314,6 +316,9 @@ Respond with ONLY the action description, nothing else.`;
           break;
       }
       
+      // Requirement 14.1: Display choice in format "Character_Name (Player X) chose: [action]"
+      console.log(`✅ ${displayName} chose: ${selectedAction.toUpperCase()}`);
+      
       return {
         selectedAction,
         selectedContent,
@@ -336,23 +341,23 @@ Respond with ONLY the action description, nothing else.`;
           selectedContent = options.talkOption;
           contentSource = this.extractContentSource(options.talkOption);
           bookQuoteMetadata = this.extractBookQuoteMetadata(options.talkOption, contentSource);
-          console.log(`🤖 ${characterName} (Computer) chose: TALK`);
           break;
         case 1:
           selectedAction = 'act';
           selectedContent = options.actOption;
           contentSource = this.extractContentSource(options.actOption);
           bookQuoteMetadata = this.extractBookQuoteMetadata(options.actOption, contentSource);
-          console.log(`🤖 ${characterName} (Computer) chose: ACT`);
           break;
         case 2:
         default:
           selectedAction = 'nothing';
           selectedContent = options.doNothingOption;
           contentSource = 'llm_generated'; // System-generated
-          console.log(`🤖 ${characterName} (Computer) chose: DO NOTHING`);
           break;
       }
+      
+      // Requirement 14.1: Display choice in format "Character_Name (Player X) chose: [action]"
+      console.log(`🤖 ${displayName} chose: ${selectedAction.toUpperCase()}`);
       
       return {
         selectedAction,
@@ -362,6 +367,18 @@ Respond with ONLY the action description, nothing else.`;
         bookQuoteMetadata
       };
     }
+  }
+
+  /**
+   * Get display name for a player
+   * Requirement 14.4: Handle case where no character assigned
+   * Returns "Character_Name (Player X)" if character is assigned, otherwise "Player X"
+   */
+  private getPlayerDisplayName(player: Player): string {
+    if (player.character && player.character.name) {
+      return `${player.character.name} (Player ${player.id})`;
+    }
+    return `Player ${player.id}`;
   }
 
   /**

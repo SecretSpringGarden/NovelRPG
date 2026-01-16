@@ -25,6 +25,12 @@ import {
 import { Player, PlayerAction } from '../models/Player';
 import { StoryEnding } from '../models/StoryEnding';
 import { GameContext } from '../services/StoryGenerator';
+import { 
+  ActionChoiceManager, 
+  createActionChoiceManager,
+  GameContext as ActionGameContext
+} from '../services/ActionChoiceManager';
+import { createBookQuoteExtractor } from '../services/BookQuoteExtractor';
 
 /**
  * Validation result interface for input validation
@@ -68,6 +74,8 @@ export class GameManager {
   private storyGenerator: StoryGenerator;
   private playerSystem: PlayerSystem;
   private gameStateManager: GameStateManager;
+  private actionChoiceManager: ActionChoiceManager | null = null;
+  private novelText: string = '';
   
   private currentSession: GameSession | null = null;
   private currentPhase: GamePhase = GamePhase.INITIALIZATION;
@@ -136,14 +144,28 @@ export class GameManager {
         }
       } else {
         console.log('📖 Analyzing novel...');
-        const novelText = fs.readFileSync(novelFile, 'utf-8');
-        novelAnalysis = await this.novelAnalyzer.analyzeNovel(novelText);
+        this.novelText = fs.readFileSync(novelFile, 'utf-8');
+        novelAnalysis = await this.novelAnalyzer.analyzeNovel(this.novelText);
         
         // Validate analysis completeness
         if (!this.validateNovelAnalysis(novelAnalysis)) {
           this.terminateGameEarly('Novel analysis failed to produce required elements');
           throw new Error('Novel analysis incomplete - game terminated');
         }
+      }
+
+      // Initialize ActionChoiceManager with novel text and analysis
+      if (this.novelText) {
+        const bookQuoteExtractor = createBookQuoteExtractor(
+          this.novelText,
+          novelAnalysis,
+          this.llmService
+        );
+        this.actionChoiceManager = createActionChoiceManager(
+          this.llmService,
+          bookQuoteExtractor,
+          this.novelText
+        );
       }
 
       // Phase 3: Character selection setup
@@ -348,6 +370,96 @@ export class GameManager {
   }
 
   /**
+   * Processes a player's turn using the new action choice system
+   * Requirements 11.1, 11.4: Generate options, present to player, apply choice
+   * Maintains backward compatibility with old processPlayerTurn method
+   */
+  async processPlayerTurnWithChoice(playerId: string): Promise<StorySegment> {
+    if (!this.currentSession || !this.currentSession.isActive) {
+      throw new Error('No active game session');
+    }
+
+    if (!this.actionChoiceManager) {
+      throw new Error('ActionChoiceManager not initialized. Novel text is required.');
+    }
+
+    const gameState = this.currentSession.gameState;
+    
+    // Find the player taking this action
+    const actingPlayer = gameState.players.find(p => p.id === playerId);
+    if (!actingPlayer) {
+      throw new Error(`Player with id ${playerId} not found in game state`);
+    }
+
+    // Get recent story segments for context
+    const recentSegments = gameState.storySegments.slice(-5);
+
+    // Create game context
+    const gameContext: ActionGameContext = {
+      gameState,
+      actingPlayer,
+      recentSegments
+    };
+
+    // Generate action options
+    const options = await this.actionChoiceManager.generateActionOptions(actingPlayer, gameContext);
+
+    // Present options and get player choice
+    const choice = await this.actionChoiceManager.presentOptionsToPlayer(actingPlayer, options);
+
+    // Handle "do nothing" action - increment rounds
+    if (choice.selectedAction === 'nothing') {
+      const updatedGameState = this.gameFlowManager.handleDoNothingAction(gameState, {
+        type: 'nothing',
+        diceRoll: 0,
+        timestamp: choice.timestamp,
+        playerId,
+        contentSource: 'llm_generated',
+        characterName: actingPlayer.character?.name // Include character name
+      });
+      this.currentSession.gameState = updatedGameState;
+      
+      // Log round increment with character name
+      const roundEvent: GameEvent = {
+        type: 'round_increment',
+        timestamp: new Date(),
+        data: { 
+          newTotalRounds: updatedGameState.totalRounds, 
+          choice: {
+            ...choice,
+            characterName: actingPlayer.character?.name
+          }
+        },
+        playerId
+      };
+      this.gameStateManager.saveGameEvent(roundEvent);
+    }
+
+    // Apply the choice and generate story segment
+    const storySegment = await this.actionChoiceManager.applyPlayerChoice(choice, gameContext);
+
+    // Add to game state
+    gameState.storySegments.push(storySegment);
+    
+    // Log story generation event with character name
+    const storyEvent: GameEvent = {
+      type: 'story_generation',
+      timestamp: new Date(),
+      data: { 
+        storySegment, 
+        choice: {
+          ...choice,
+          characterName: actingPlayer.character?.name
+        }
+      },
+      playerId
+    };
+    this.gameStateManager.saveGameEvent(storyEvent);
+
+    return storySegment;
+  }
+
+  /**
    * Processes a player's turn and generates appropriate story content
    */
   async processPlayerTurn(playerId: string, action: PlayerAction): Promise<StorySegment> {
@@ -368,11 +480,17 @@ export class GameManager {
       const updatedGameState = this.gameFlowManager.handleDoNothingAction(gameState, action);
       this.currentSession.gameState = updatedGameState;
       
-      // Log round increment
+      // Log round increment with character name
       const roundEvent: GameEvent = {
         type: 'round_increment',
         timestamp: new Date(),
-        data: { newTotalRounds: updatedGameState.totalRounds, action },
+        data: { 
+          newTotalRounds: updatedGameState.totalRounds, 
+          action: {
+            ...action,
+            characterName: actingPlayer.character?.name
+          }
+        },
         playerId
       };
       this.gameStateManager.saveGameEvent(roundEvent);
@@ -434,11 +552,17 @@ export class GameManager {
     // Add to game state and save
     gameState.storySegments.push(storySegment);
     
-    // Log story generation event
+    // Log story generation event with character name
     const storyEvent: GameEvent = {
       type: 'story_generation',
       timestamp: new Date(),
-      data: { storySegment, action },
+      data: { 
+        storySegment, 
+        action: {
+          ...action,
+          characterName: actingPlayer.character?.name
+        }
+      },
       playerId
     };
     this.gameStateManager.saveGameEvent(storyEvent);

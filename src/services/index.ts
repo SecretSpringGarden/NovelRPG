@@ -19,3 +19,4 @@ export { StoryGenerator, DefaultStoryGenerator, createStoryGenerator, GameContex
 export { PlayerSystem, HumanPlayer, ComputerPlayer } from './PlayerSystem';
 export { GameStateManager, DefaultGameStateManager, createGameStateManager } from './GameStateManager';
 export { BookQuoteExtractor, DefaultBookQuoteExtractor, createBookQuoteExtractor, DialogueContext, CompatibilityScore } from './BookQuoteExtractor';
+export { ActionChoiceManager, DefaultActionChoiceManager, createActionChoiceManager, ActionOptions, PlayerChoice, GameContext as ActionGameContext } from './ActionChoiceManager';

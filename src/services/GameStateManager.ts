@@ -234,11 +234,12 @@ Filename: ${metadata.filename}
 
   /**
    * Formats a game event for file output
+   * Requirement 14.2: Include both character name and player number in logs
    */
   private formatGameEvent(event: GameEvent): string {
     const timestamp = event.timestamp.toISOString();
     
-    // Try to extract character name from event data if available
+    // Try to extract character name and player info from event data
     let playerInfo = '';
     if (event.playerId) {
       // Check if event data contains character information
@@ -247,6 +248,10 @@ Filename: ${metadata.filename}
         playerInfo = ` (${characterName} - Player ${event.playerId})`;
       } else if (event.data && event.data.action && event.data.action.characterName) {
         const characterName = event.data.action.characterName;
+        playerInfo = ` (${characterName} - Player ${event.playerId})`;
+      } else if (event.data && event.data.choice && event.data.choice.characterName) {
+        // For choice events, extract character name
+        const characterName = event.data.choice.characterName;
         playerInfo = ` (${characterName} - Player ${event.playerId})`;
       } else {
         playerInfo = ` (Player ${event.playerId})`;

@@ -20,6 +20,7 @@ export interface PlayerAction {
   diceRoll: number;
   timestamp: Date;
   playerId: string;
+  characterName?: string; // Character name for display (Requirement 14.2)
   contentSource: 'book_quote' | 'llm_generated'; // Clear marking of source
   bookQuoteMetadata?: BookQuoteMetadata; // If book quote, include metadata
 }
