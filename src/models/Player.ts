@@ -3,21 +3,23 @@ import { BookQuoteMetadata } from './GameState';
 
 /**
  * Player interface representing both human and computer players
+ * Note: rollDice() method is deprecated and optional for backward compatibility
  */
 export interface Player {
   id: string;
   type: 'human' | 'computer';
   character?: Character;
-  rollDice(): number;
+  rollDice?(): number; // Optional for backward compatibility
   makeChoice(options: string[]): Promise<string>;
 }
 
 /**
  * PlayerAction interface representing actions taken during gameplay
+ * Note: diceRoll field is deprecated and optional for backward compatibility
  */
 export interface PlayerAction {
   type: 'talk' | 'act' | 'nothing';
-  diceRoll: number;
+  diceRoll?: number; // Optional for backward compatibility
   timestamp: Date;
   playerId: string;
   characterName?: string; // Character name for display (Requirement 14.2)
@@ -52,7 +54,7 @@ export function validatePlayer(player: any): player is Player {
   }
 
   // Check required methods exist
-  if (typeof player.rollDice !== 'function' || typeof player.makeChoice !== 'function') {
+  if (typeof player.makeChoice !== 'function') {
     return false;
   }
 
@@ -70,14 +72,6 @@ export function validatePlayerAction(action: any): action is PlayerAction {
   // Check type is valid enum value
   const validTypes = ['talk', 'act', 'nothing'];
   if (!validTypes.includes(action.type)) {
-    return false;
-  }
-
-  // Check diceRoll is between 1-10
-  if (typeof action.diceRoll !== 'number' || 
-      action.diceRoll < 1 || 
-      action.diceRoll > 10 || 
-      !Number.isInteger(action.diceRoll)) {
     return false;
   }
 

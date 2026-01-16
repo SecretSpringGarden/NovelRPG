@@ -441,29 +441,29 @@ This implementation plan breaks down the game improvements into discrete, manage
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.4**
     - Test that invalid configurations are rejected
 
-- [ ] 12. Phase 10: Code Cleanup and Refactoring
-  - [ ] 12.1 Remove old dice-roll-based action determination
+- [x] 12. Phase 10: Code Cleanup and Refactoring
+  - [x] 12.1 Remove old dice-roll-based action determination
     - Identify and remove obsolete code in GameManager
     - Identify and remove obsolete code in GameFlowManager
     - _Requirements: 15.1_
   
-  - [ ] 12.2 Remove obsolete test code
+  - [x] 12.2 Remove obsolete test code
     - Identify tests that test removed functionality
     - Remove or update obsolete tests
     - _Requirements: 15.2_
   
-  - [ ] 12.3 Update documentation
+  - [x] 12.3 Update documentation
     - Update README with new features
     - Update API documentation
     - Update usage examples
     - _Requirements: 15.3_
   
-  - [ ] 12.4 Verify all tests pass after cleanup
+  - [x] 12.4 Verify all tests pass after cleanup
     - Run complete test suite
     - Fix any broken tests
     - _Requirements: 15.4_
   
-  - [ ] 12.5 Verify API compatibility
+  - [x] 12.5 Verify API compatibility
     - Check that public APIs remain unchanged
     - Test backward compatibility
     - _Requirements: 15.5_
@@ -473,7 +473,7 @@ This implementation plan breaks down the game improvements into discrete, manage
     - **Validates: Requirements 15.5**
     - Test that public API signatures are unchanged
 
-- [ ] 13. Checkpoint - Cleanup Complete
+- [x] 13. Checkpoint - Cleanup Complete
   - Ensure all tests pass
   - Verify no breaking changes
   - Verify documentation is updated

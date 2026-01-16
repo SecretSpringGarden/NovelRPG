@@ -411,7 +411,6 @@ export class GameManager {
     if (choice.selectedAction === 'nothing') {
       const updatedGameState = this.gameFlowManager.handleDoNothingAction(gameState, {
         type: 'nothing',
-        diceRoll: 0,
         timestamp: choice.timestamp,
         playerId,
         contentSource: 'llm_generated',
@@ -461,6 +460,8 @@ export class GameManager {
 
   /**
    * Processes a player's turn and generates appropriate story content
+   * @deprecated Use processPlayerTurnWithChoice() instead for the new action choice system
+   * This method is kept for backward compatibility with existing code
    */
   async processPlayerTurn(playerId: string, action: PlayerAction): Promise<StorySegment> {
     if (!this.currentSession || !this.currentSession.isActive) {
@@ -546,7 +547,7 @@ export class GameManager {
       timestamp: new Date(),
       characterName: actingPlayer.character?.name,
       playerId,
-      contentSource: 'llm_generated' // Default to LLM generated for now
+      contentSource: action.contentSource || 'llm_generated' // Use provided source or default
     };
 
     // Add to game state and save
@@ -572,6 +573,7 @@ export class GameManager {
 
   /**
    * Runs the complete game loop from current state to completion
+   * Uses the new action choice system (ActionChoiceManager)
    */
   async runGameLoop(): Promise<GameState> {
     if (!this.currentSession || !this.currentSession.isActive) {
@@ -588,20 +590,8 @@ export class GameManager {
             break;
           }
 
-          // Get player action (with timeout handling)
-          const playerAction = await this.gameFlowManager.processPlayerTurn(player);
-          
-          // Log player action
-          const actionEvent: GameEvent = {
-            type: 'player_action',
-            timestamp: new Date(),
-            data: { action: playerAction },
-            playerId: player.id
-          };
-          this.gameStateManager.saveGameEvent(actionEvent);
-
-          // Process the action and generate story content
-          await this.processPlayerTurn(player.id, playerAction);
+          // Process the player's turn using the new action choice system
+          await this.processPlayerTurnWithChoice(player.id);
         }
 
         // Advance to next round if not ended

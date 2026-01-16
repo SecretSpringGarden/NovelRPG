@@ -381,16 +381,16 @@ async function runGameWithUI(gameManager: GameManager, gameUI: GameUI) {
       gameUI.displayGameProgress(gameState);
       
       // Process each player's turn
+      // NOTE: This code uses the old dice-roll system and is deprecated.
+      // For new implementations, use GameManager.processPlayerTurnWithChoice()
+      // which uses the ActionChoiceManager for player action selection.
       for (const player of gameState.players) {
         if (!session.isActive || gameState.currentRound > gameState.totalRounds) {
           break;
         }
         
-        // Roll dice for player
-        const diceRoll = await gameUI.rollDiceForPlayer(player);
-        
-        // Create player action based on dice roll
-        const playerAction = createPlayerAction(player.id, diceRoll);
+        // Create player action using random selection (replaces dice roll)
+        const playerAction = createPlayerAction(player.id);
         
         // Display the action
         gameUI.displayPlayerAction(player, playerAction);
@@ -420,25 +420,30 @@ async function runGameWithUI(gameManager: GameManager, gameUI: GameUI) {
 }
 
 /**
- * Create player action based on dice roll according to game rules
+ * Create player action based on random selection
+ * NOTE: This replaces the old dice-roll system
  */
-function createPlayerAction(playerId: string, diceRoll: number): any {
+function createPlayerAction(playerId: string): any {
+  // Randomly select from three options: talk, act, or nothing
+  const randomChoice = Math.floor(Math.random() * 3);
+  
   let actionType: 'talk' | 'act' | 'nothing';
   
-  if (diceRoll % 2 === 0) {
-    // Even numbers (2,4,6,8,10) -> talk
-    actionType = 'talk';
-  } else if (diceRoll === 1 || diceRoll === 3 || diceRoll === 5) {
-    // 1, 3, 5 -> act
-    actionType = 'act';
-  } else {
-    // 7, 9 -> do nothing
-    actionType = 'nothing';
+  switch (randomChoice) {
+    case 0:
+      actionType = 'talk';
+      break;
+    case 1:
+      actionType = 'act';
+      break;
+    case 2:
+    default:
+      actionType = 'nothing';
+      break;
   }
   
   return {
     type: actionType,
-    diceRoll,
     timestamp: new Date(),
     playerId,
     contentSource: 'llm_generated' // Default to LLM generated

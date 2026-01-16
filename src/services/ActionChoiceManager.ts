@@ -609,7 +609,6 @@ Respond with ONLY the action description, nothing else.`;
         wordCount: 0,
         generatedBy: {
           type: 'nothing',
-          diceRoll: 0, // No dice roll for "do nothing"
           timestamp: choice.timestamp,
           playerId: actingPlayer.id,
           contentSource: 'llm_generated'
@@ -661,7 +660,6 @@ Respond with ONLY the action description, nothing else.`;
       wordCount,
       generatedBy: {
         type: choice.selectedAction,
-        diceRoll: 0, // No dice roll in new system
         timestamp: choice.timestamp,
         playerId: actingPlayer.id,
         contentSource: choice.contentSource,

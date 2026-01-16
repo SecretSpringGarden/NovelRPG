@@ -145,31 +145,12 @@ export class GameUI {
     console.log('   • Adding random alternatives');
   }
 
-  /**
-   * Handle dice roll input for player turns
-   */
-  async rollDiceForPlayer(player: Player): Promise<number> {
-    const playerName = player.character?.name || player.id;
-    const playerType = player.type === 'human' ? '👤' : '🤖';
-    
-    console.log(`\n🎲 ${playerType} ${playerName}'s turn`);
-    
-    if (player.type === 'human') {
-      console.log('Press SPACE BAR to roll dice (60 second timeout)...');
-      
-      const diceRoll = await this.waitForSpaceBar(60000);
-      console.log(`🎲 You rolled: ${diceRoll}`);
-      return diceRoll;
-    } else {
-      // Computer player automatically rolls
-      const diceRoll = player.rollDice();
-      console.log(`🎲 Computer rolled: ${diceRoll}`);
-      return diceRoll;
-    }
-  }
+  // rollDiceForPlayer() method has been removed.
+  // This was part of the old dice-roll system.
+  // Use ActionChoiceManager for player action selection.
 
   /**
-   * Display player action based on dice roll
+   * Display player action
    * Requirement 14.3: Show character names and player numbers for all past turns
    */
   displayPlayerAction(player: Player, action: PlayerAction): void {
@@ -181,7 +162,7 @@ export class GameUI {
     const actionEmoji = this.getActionEmoji(action.type);
     const actionText = this.getActionText(action.type);
     
-    console.log(`${actionEmoji} ${displayName} chose to ${actionText} (rolled ${action.diceRoll})`);
+    console.log(`${actionEmoji} ${displayName} chose to ${actionText}`);
     
     if (action.type === 'nothing') {
       console.log('   ⏭️  Round count increased by 1');
@@ -330,37 +311,8 @@ export class GameUI {
     });
   }
 
-  private async waitForSpaceBar(timeoutMs: number): Promise<number> {
-    return new Promise((resolve) => {
-      let resolved = false;
-      let timeout: NodeJS.Timeout;
-      
-      // Set up timeout
-      timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          process.stdin.removeListener('data', onKeyPress);
-          console.log('\n⏰ Time expired! Auto-rolling dice...');
-          const autoRoll = Math.floor(Math.random() * 10) + 1;
-          resolve(autoRoll);
-        }
-      }, timeoutMs);
-
-      // Listen for space bar press
-      const onKeyPress = (chunk: Buffer) => {
-        if (!resolved && chunk[0] === 32) { // Space bar ASCII code
-          resolved = true;
-          clearTimeout(timeout);
-          process.stdin.removeListener('data', onKeyPress);
-          
-          const diceRoll = Math.floor(Math.random() * 10) + 1;
-          resolve(diceRoll);
-        }
-      };
-
-      process.stdin.on('data', onKeyPress);
-    });
-  }
+  // waitForSpaceBar() method has been removed.
+  // This was part of the old dice-roll system.
 
   private getActionEmoji(actionType: 'talk' | 'act' | 'nothing'): string {
     switch (actionType) {

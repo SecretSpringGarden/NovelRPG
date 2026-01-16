@@ -212,16 +212,13 @@ export class TestFramework {
           await this.sleep(5000); // 5 second delay every 3 turns
         }
 
-        // Generate dice roll for computer player
-        const diceRoll = Math.floor(Math.random() * 10) + 1;
-        
-        // Create player action based on dice roll
-        const playerAction = this.createPlayerAction(player.id, diceRoll);
+        // Create player action using random selection
+        const playerAction = this.createPlayerAction(player.id);
         
         // Get player display name for logging
         const displayName = this.gameManager.getPlayerDisplayName(player.id);
         const actionType = playerAction.type;
-        console.log(`🎲 ${displayName} rolled ${diceRoll} → ${actionType}`);
+        console.log(`🎲 ${displayName} chose → ${actionType}`);
         
         // Process the action through game manager (this may call LLM)
         try {
@@ -256,7 +253,7 @@ export class TestFramework {
    * Requirement 11.5: Computer players randomly select from three options
    * Updated to use new action choice system instead of dice rolls
    */
-  private createPlayerAction(playerId: string, diceRoll: number): any {
+  private createPlayerAction(playerId: string): any {
     // Randomly select from three options: talk, act, or nothing
     // This replaces the old dice-roll-based system
     const randomChoice = Math.floor(Math.random() * 3);
@@ -278,7 +275,6 @@ export class TestFramework {
     
     return {
       type: actionType,
-      diceRoll, // Keep for backward compatibility, but not used in new system
       timestamp: new Date(),
       playerId,
       contentSource: 'llm_generated' // Default to LLM generated

@@ -367,10 +367,10 @@ Ending Compatibility Adjustments: ${gameState.quoteUsageStats.endingCompatibilit
         validationErrors: []
       },
       players: [
-        { id: '1', type: 'human', rollDice: () => 5, makeChoice: async () => 'choice' },
-        { id: '2', type: 'human', rollDice: () => 5, makeChoice: async () => 'choice' },
-        { id: '3', type: 'computer', rollDice: () => 5, makeChoice: async () => 'choice' },
-        { id: '4', type: 'computer', rollDice: () => 5, makeChoice: async () => 'choice' }
+        { id: '1', type: 'human', makeChoice: async () => 'choice' },
+        { id: '2', type: 'human', makeChoice: async () => 'choice' },
+        { id: '3', type: 'computer', makeChoice: async () => 'choice' },
+        { id: '4', type: 'computer', makeChoice: async () => 'choice' }
       ],
       currentRound: 1,
       totalRounds: metadata.totalRounds,

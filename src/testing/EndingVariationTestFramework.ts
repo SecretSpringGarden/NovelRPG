@@ -527,7 +527,6 @@ export class EndingVariationTestFramework {
         const actionType: 'talk' | 'act' = Math.random() < 0.5 ? 'talk' : 'act';
         const playerAction = {
           type: actionType,
-          diceRoll: Math.floor(Math.random() * 6) + 1,
           timestamp: new Date(),
           playerId: player.id,
           contentSource: 'llm_generated' as const,

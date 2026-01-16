@@ -13,10 +13,6 @@ export class HumanPlayer implements Player {
     this.id = id;
   }
 
-  rollDice(): number {
-    return Math.floor(Math.random() * 10) + 1;
-  }
-
   async makeChoice(options: string[]): Promise<string> {
     // In a real implementation, this would prompt the user
     // For now, return the first option as a placeholder
@@ -34,10 +30,6 @@ export class ComputerPlayer implements Player {
 
   constructor(id: string) {
     this.id = id;
-  }
-
-  rollDice(): number {
-    return Math.floor(Math.random() * 10) + 1;
   }
 
   async makeChoice(options: string[]): Promise<string> {
@@ -78,20 +70,21 @@ export class PlayerSystem {
   }
 
   /**
-   * Determine turn order based on dice rolls (highest roll gets Player 1, etc.)
+   * Determine turn order based on random selection (highest roll gets Player 1, etc.)
+   * Note: This method previously used dice rolls but now uses random numbers for ordering
    */
   rollForTurnOrder(players: Player[]): Player[] {
     if (players.length !== 4) {
       throw new Error('Exactly 4 players required for turn order determination');
     }
 
-    // Create array of players with their dice rolls
+    // Create array of players with random numbers for ordering
     const playersWithRolls = players.map(player => ({
       player,
-      roll: player.rollDice()
+      roll: Math.floor(Math.random() * 10) + 1
     }));
 
-    // Sort by dice roll (highest first), then by player ID for tie-breaking
+    // Sort by random number (highest first), then by player ID for tie-breaking
     playersWithRolls.sort((a, b) => {
       if (a.roll !== b.roll) {
         return b.roll - a.roll; // Highest roll first
@@ -160,38 +153,9 @@ export class PlayerSystem {
     }
   }
 
-  /**
-   * Process player input with timeout handling
-   * Returns the player action based on dice roll
-   * @deprecated Use GameFlowManager.processPlayerTurn() instead for full timeout handling
-   */
-  async processPlayerInput(player: Player, timeLimit: number = 60000): Promise<PlayerAction> {
-    // Simple implementation for backward compatibility
-    // For full timeout handling, use GameFlowManager.processPlayerTurn()
-    const diceRoll = player.rollDice();
-    
-    // Map dice roll to action type according to requirements
-    let actionType: 'talk' | 'act' | 'nothing';
-    
-    if (diceRoll % 2 === 0) {
-      // Even numbers (2,4,6,8,10) -> talk
-      actionType = 'talk';
-    } else if (diceRoll === 1 || diceRoll === 3 || diceRoll === 5) {
-      // 1, 3, 5 -> act
-      actionType = 'act';
-    } else {
-      // 7, 9 -> do nothing
-      actionType = 'nothing';
-    }
-
-    return {
-      type: actionType,
-      diceRoll,
-      timestamp: new Date(),
-      playerId: player.id,
-      contentSource: 'llm_generated' // Default to LLM generated
-    };
-  }
+  // processPlayerInput() method has been removed.
+  // This was part of the old dice-roll system.
+  // Use ActionChoiceManager for player input handling.
 
   /**
    * Validate that all players have unique characters assigned
