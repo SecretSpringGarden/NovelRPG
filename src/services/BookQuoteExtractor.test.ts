@@ -131,7 +131,7 @@ describe('BookQuoteExtractor', () => {
       
       expect(context.startPosition).toBeGreaterThanOrEqual(0);
       expect(context.endPosition).toBeLessThanOrEqual(testNovelText.length);
-      expect(context.sceneDescription).toContain('Early section');
+      expect(context.sceneDescription).toContain('Opening section');
     });
 
     it('should return context for later rounds', async () => {
@@ -139,7 +139,7 @@ describe('BookQuoteExtractor', () => {
       
       expect(context.startPosition).toBeGreaterThanOrEqual(0);
       expect(context.endPosition).toBeLessThanOrEqual(testNovelText.length);
-      expect(context.sceneDescription).toContain('Later section');
+      expect(context.sceneDescription).toContain('Concluding section');
     });
 
     it('should identify chapter numbers when present', async () => {
