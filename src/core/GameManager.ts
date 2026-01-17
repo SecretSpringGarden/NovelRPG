@@ -8,10 +8,12 @@ import {
   PlayerSystem, 
   GameStateManager,
   LLMService,
+  AssistantService,
   createNovelAnalyzer,
   createStoryGenerator,
   createGameStateManager,
-  createLLMService
+  createLLMService,
+  createAssistantService
 } from '../services';
 import { 
   GameState, 
@@ -70,12 +72,14 @@ export class GameManager {
   private configManager: ConfigManager;
   private gameFlowManager: GameFlowManager;
   private llmService: LLMService;
+  private assistantService: AssistantService;
   private novelAnalyzer: NovelAnalyzer;
   private storyGenerator: StoryGenerator;
   private playerSystem: PlayerSystem;
   private gameStateManager: GameStateManager;
   private actionChoiceManager: ActionChoiceManager | null = null;
   private novelText: string = '';
+  private currentNovelAnalysis: NovelAnalysis | null = null; // Store for cleanup
   
   private currentSession: GameSession | null = null;
   private currentPhase: GamePhase = GamePhase.INITIALIZATION;
@@ -87,6 +91,9 @@ export class GameManager {
     // Initialize LLM service first
     const llmConfig = this.configManager.getLLMConfig();
     this.llmService = createLLMService(llmConfig);
+    
+    // Initialize Assistant service for RAG-based quote extraction
+    this.assistantService = createAssistantService();
     
     // Initialize services using factory functions
     this.novelAnalyzer = createNovelAnalyzer();
@@ -101,6 +108,7 @@ export class GameManager {
   async initializeLLMService(): Promise<void> {
     const llmConfig = this.configManager.getLLMConfig();
     await this.llmService.initialize(llmConfig);
+    await this.assistantService.initialize(llmConfig);
   }
 
   /**
@@ -109,9 +117,10 @@ export class GameManager {
    * 
    * @param novelFile Path to the novel file
    * @param humanPlayers Number of human players (0-4)
-   * @param rounds Number of game rounds (10-20)
+   * @param rounds Number of game rounds (10-20, or custom if allowCustomRounds is true)
    * @param allowZeroHumans Allow zero human players for testing mode
    * @param preAnalyzedNovel Optional pre-analyzed novel data to skip analysis phase
+   * @param allowCustomRounds Allow custom round counts outside 10-20 range for testing
    * @returns GameSession object representing the active game
    */
   async startGame(
@@ -119,22 +128,29 @@ export class GameManager {
     humanPlayers: number, 
     rounds: number, 
     allowZeroHumans: boolean = false,
-    preAnalyzedNovel?: NovelAnalysis
+    preAnalyzedNovel?: NovelAnalysis,
+    allowCustomRounds: boolean = false,
+    quotePercentage: number = 0 // NEW: Percentage of book quotes to use (0-100)
   ): Promise<GameSession> {
     try {
       // Phase 1: Input validation
       this.currentPhase = GamePhase.INITIALIZATION;
-      const validation = this.validateInput(novelFile, humanPlayers, rounds, allowZeroHumans);
+      const validation = this.validateInput(novelFile, humanPlayers, rounds, allowZeroHumans, allowCustomRounds);
       if (!validation.isValid) {
         throw new Error(`Input validation failed: ${validation.errors.join(', ')}`);
       }
 
-      // Phase 2: Novel analysis (skip if pre-analyzed data provided)
+      // Phase 2: Novel analysis (skip RAG analysis if pre-analyzed data provided)
       this.currentPhase = GamePhase.NOVEL_ANALYSIS;
       let novelAnalysis: NovelAnalysis;
       
+      // ALWAYS load the novel text for BookQuoteExtractor
+      // This is separate from RAG analysis - it's just reading the file for quote extraction
+      console.log('📖 Loading novel text for quote extraction...');
+      this.novelText = fs.readFileSync(novelFile, 'utf-8');
+
       if (preAnalyzedNovel) {
-        console.log('📚 Using pre-analyzed novel data (skipping analysis)');
+        console.log('📚 Using pre-analyzed novel data (skipping RAG analysis)');
         console.log('   ✅ Reusing existing assistant and analysis results');
         novelAnalysis = preAnalyzedNovel;
         
@@ -143,8 +159,8 @@ export class GameManager {
           throw new Error('Pre-analyzed novel data is invalid or incomplete');
         }
       } else {
-        console.log('📖 Analyzing novel...');
-        this.novelText = fs.readFileSync(novelFile, 'utf-8');
+        console.log('📖 Analyzing novel with RAG (OpenAI Assistants API)...');
+        // Novel text already loaded above
         novelAnalysis = await this.novelAnalyzer.analyzeNovel(this.novelText);
         
         // Validate analysis completeness
@@ -154,19 +170,23 @@ export class GameManager {
         }
       }
 
+      // Store novel analysis for cleanup later
+      this.currentNovelAnalysis = novelAnalysis;
+
       // Initialize ActionChoiceManager with novel text and analysis
-      if (this.novelText) {
-        const bookQuoteExtractor = createBookQuoteExtractor(
-          this.novelText,
-          novelAnalysis,
-          this.llmService
-        );
-        this.actionChoiceManager = createActionChoiceManager(
-          this.llmService,
-          bookQuoteExtractor,
-          this.novelText
-        );
-      }
+      // Novel text is now ALWAYS available for quote extraction
+      const bookQuoteExtractor = createBookQuoteExtractor(
+        this.novelText,
+        novelAnalysis,
+        this.llmService,
+        this.assistantService
+      );
+      this.actionChoiceManager = createActionChoiceManager(
+        this.llmService,
+        bookQuoteExtractor,
+        this.novelText
+      );
+      console.log('✅ ActionChoiceManager initialized with book quote support (RAG-based)');
 
       // Phase 3: Character selection setup
       this.currentPhase = GamePhase.CHARACTER_SELECTION;
@@ -201,14 +221,14 @@ export class GameManager {
         currentRound: 1,
         totalRounds: rounds,
         storySegments: [],
-        targetEnding: undefined,
-        quotePercentage: 0, // Default to 0% book quotes (all LLM generated)
-        effectiveQuotePercentage: 0,
+        targetEnding: storyEndings[0], // Select original ending by default
+        quotePercentage: quotePercentage, // Use provided quote percentage
+        effectiveQuotePercentage: quotePercentage,
         quoteUsageStats: {
           totalActions: 0,
           bookQuotesUsed: 0,
           llmGeneratedUsed: 0,
-          configuredPercentage: 0,
+          configuredPercentage: quotePercentage,
           actualPercentage: 0,
           endingCompatibilityAdjustments: 0
         }
@@ -248,7 +268,7 @@ export class GameManager {
   /**
    * Validates input parameters for game creation
    */
-  validateInput(novelFile: string, humanPlayers: number, rounds: number, allowZeroHumans: boolean = false): ValidationResult {
+  validateInput(novelFile: string, humanPlayers: number, rounds: number, allowZeroHumans: boolean = false, allowCustomRounds: boolean = false): ValidationResult {
     const errors: string[] = [];
     const gameConfig = this.configManager.getGameConfig();
 
@@ -287,8 +307,16 @@ export class GameManager {
     }
 
     // Validate rounds count
-    if (!Number.isInteger(rounds) || rounds < 10 || rounds > 20) {
-      errors.push('Number of rounds must be between 10 and 20');
+    if (allowCustomRounds) {
+      // For testing mode, allow any positive integer
+      if (!Number.isInteger(rounds) || rounds < 1) {
+        errors.push('Number of rounds must be a positive integer');
+      }
+    } else {
+      // Normal mode: enforce 10-20 range
+      if (!Number.isInteger(rounds) || rounds < 10 || rounds > 20) {
+        errors.push('Number of rounds must be between 10 and 20');
+      }
     }
 
     return {
@@ -672,5 +700,38 @@ export class GameManager {
    */
   private countWords(text: string): number {
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  }
+
+  /**
+   * Cleanup Assistant API resources (assistant, file, vector store)
+   * Should be called when game ends or on error
+   */
+  async cleanupAssistantResources(): Promise<void> {
+    if (!this.currentNovelAnalysis) {
+      console.log('?  No assistant resources to cleanup');
+      return;
+    }
+
+    const { assistantId, fileId } = this.currentNovelAnalysis;
+    
+    if (!assistantId && !fileId) {
+      console.log('?  No assistant resources to cleanup');
+      return;
+    }
+
+    console.log('🗑️  Cleaning up Assistant API resources...');
+    if (assistantId) console.log(`   Assistant ID: ${assistantId}`);
+    if (fileId) console.log(`   File ID: ${fileId}`);
+
+    try {
+      await this.novelAnalyzer.cleanup();
+      console.log(' Assistant resources cleaned up successfully');
+    } catch (error) {
+      console.error(' Failed to cleanup assistant resources:', error);
+      // Don't throw - cleanup failures shouldn't break the game
+    } finally {
+      // Clear the stored analysis
+      this.currentNovelAnalysis = null;
+    }
   }
 }

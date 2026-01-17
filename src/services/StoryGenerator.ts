@@ -47,11 +47,10 @@ export class DefaultStoryGenerator implements StoryGenerator {
   }
 
   /**
-   * Generates exactly 8 story endings with the required distribution:
+   * Generates exactly 3 story endings:
    * - 1 original ending (matches novel's conclusion)
-   * - 3 similar endings (80% similar to original)
    * - 1 opposite ending (direct opposite of original)
-   * - 3 random alternative endings
+   * - 1 random alternative ending
    */
   async generateEndings(analysis: NovelAnalysis): Promise<StoryEnding[]> {
     const endings: StoryEnding[] = [];
@@ -62,28 +61,19 @@ export class DefaultStoryGenerator implements StoryGenerator {
       const originalEnding = await this.generateOriginalEnding(analysis);
       endings.push(originalEnding);
 
-      // Generate 3 similar endings (80% similar to original)
-      for (let i = 0; i < 3; i++) {
-        console.log(`🔄 Generating similar ending ${i + 1}/3...`);
-        const similarEnding = await this.generateSimilarEnding(analysis, originalEnding, i + 1);
-        endings.push(similarEnding);
-      }
-
       // Generate opposite ending (direct opposite of original)
       console.log('🔄 Generating opposite ending...');
       const oppositeEnding = await this.generateOppositeEnding(analysis, originalEnding);
       endings.push(oppositeEnding);
 
-      // Generate 3 random alternative endings
-      for (let i = 0; i < 3; i++) {
-        console.log(`🎲 Generating random ending ${i + 1}/3...`);
-        const randomEnding = await this.generateRandomEnding(analysis, i + 1);
-        endings.push(randomEnding);
-      }
+      // Generate 1 random alternative ending
+      console.log(`🎲 Generating random ending...`);
+      const randomEnding = await this.generateRandomEnding(analysis, 1);
+      endings.push(randomEnding);
 
       // Validate the generated endings
       if (!this.validateEndingGeneration(endings)) {
-        throw new Error('Generated endings do not meet required distribution or validation criteria');
+        throw new Error('Generated endings do not meet required validation criteria');
       }
 
       this.generatedEndings = endings;
@@ -141,7 +131,7 @@ export class DefaultStoryGenerator implements StoryGenerator {
   }
 
   /**
-   * Selects which of the 8 endings to target based on current game state and player action
+   * Selects which of the 3 endings to target based on current game state and player action
    */
   selectTargetEnding(currentState: GameState, playerAction: PlayerAction): StoryEnding {
     if (this.generatedEndings.length === 0) {
@@ -151,12 +141,10 @@ export class DefaultStoryGenerator implements StoryGenerator {
     // Simple targeting logic based on game progression and action type
     const progressRatio = currentState.currentRound / currentState.totalRounds;
     
-    // Early game (first third) - lean toward original or similar endings
+    // Early game (first third) - lean toward original ending
     if (progressRatio < 0.33) {
-      const conservativeEndings = this.generatedEndings.filter(e => 
-        e.type === 'original' || e.type === 'similar'
-      );
-      return this.selectRandomFromArray(conservativeEndings);
+      const originalEnding = this.generatedEndings.find(e => e.type === 'original');
+      return originalEnding || this.selectRandomFromArray(this.generatedEndings);
     }
     
     // Mid game (middle third) - any ending is possible
@@ -166,11 +154,9 @@ export class DefaultStoryGenerator implements StoryGenerator {
     
     // Late game (final third) - weight selection based on action type
     if (playerAction.type === 'talk') {
-      // Talking actions lean toward original or similar endings
-      const talkEndings = this.generatedEndings.filter(e => 
-        e.type === 'original' || e.type === 'similar'
-      );
-      return this.selectRandomFromArray(talkEndings);
+      // Talking actions lean toward original ending
+      const originalEnding = this.generatedEndings.find(e => e.type === 'original');
+      return originalEnding || this.selectRandomFromArray(this.generatedEndings);
     } else if (playerAction.type === 'act') {
       // Acting actions can lead to any ending, including dramatic ones
       return this.selectRandomFromArray(this.generatedEndings);
@@ -179,7 +165,7 @@ export class DefaultStoryGenerator implements StoryGenerator {
       const passiveEndings = this.generatedEndings.filter(e => 
         e.type === 'random' || e.type === 'opposite'
       );
-      return this.selectRandomFromArray(passiveEndings);
+      return passiveEndings.length > 0 ? this.selectRandomFromArray(passiveEndings) : this.selectRandomFromArray(this.generatedEndings);
     }
   }
 
@@ -206,25 +192,6 @@ Generate a story ending description that stays true to the original novel's conc
     return {
       id: 'original-1',
       type: 'original',
-      description: description.trim(),
-      targetScore: 0 // Will be calculated based on usage
-    };
-  }
-
-  private async generateSimilarEnding(analysis: NovelAnalysis, originalEnding: StoryEnding, index: number): Promise<StoryEnding> {
-    const prompt = `Based on the novel analysis and original ending provided, create a story ending that is approximately 80% similar to the original but with some variation.
-
-Original ending: ${originalEnding.description}
-Novel conclusion: ${analysis.conclusion}
-Main characters: ${analysis.mainCharacters.map(c => c.name).join(', ')}
-
-Generate a story ending that maintains the core elements and tone of the original but introduces minor variations in details, character outcomes, or specific events. The ending should feel like a natural alternative to the original. The description should be 2-3 sentences.`;
-
-    const description = await this.llmService.generateContent(prompt, analysis);
-    
-    return {
-      id: `similar-${index}`,
-      type: 'similar',
       description: description.trim(),
       targetScore: 0 // Will be calculated based on usage
     };

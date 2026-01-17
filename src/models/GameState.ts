@@ -14,6 +14,10 @@ export interface NovelAnalysis {
   conclusion: string;
   isComplete: boolean;
   validationErrors: string[];
+  // Assistant API resources (kept alive for quote extraction during game)
+  assistantId?: string;
+  fileId?: string;
+  vectorStoreId?: string;
 }
 
 /**

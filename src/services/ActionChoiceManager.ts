@@ -100,39 +100,42 @@ export class DefaultActionChoiceManager implements ActionChoiceManager {
           );
 
           if (useBookQuote) {
-            // Find dialogue context for current round
-            const dialogueContext = await this.bookQuoteExtractor.findDialogueContext(
-              gameState.currentRound,
-              gameState.totalRounds
-            );
-
-            // Extract character dialogue
-            const dialogueQuotes = await this.bookQuoteExtractor.extractCharacterDialogue(
+            // Use RAG-based quote extraction (NEW APPROACH)
+            const quote = await this.bookQuoteExtractor.extractContextualQuoteWithRAG(
               character,
-              dialogueContext,
-              gameState.targetEnding
+              {
+                recentSegments: recentSegments.map(seg => ({
+                  content: seg.content,
+                  characterName: seg.characterName
+                })),
+                currentRound: gameState.currentRound,
+                totalRounds: gameState.totalRounds,
+                novelTitle: gameState.metadata.novelTitle
+              },
+              gameState.targetEnding,
+              'talk'
             );
 
-            if (dialogueQuotes.length > 0) {
-              // Check ending compatibility for the first quote
+            if (quote) {
+              // Check ending compatibility for the quote
               const compatibilityScore = await this.bookQuoteExtractor.checkEndingCompatibility(
-                dialogueQuotes[0],
+                quote,
                 gameState.targetEnding
               );
 
               if (compatibilityScore.shouldUse) {
-                talkOption = `[Book Quote - ${dialogueContext.sceneDescription}]\n"${dialogueQuotes[0]}"`;
+                talkOption = `[Book Quote - RAG]\n"${quote}"`;
               } else {
                 // Fallback to LLM if quote doesn't support ending
                 talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
                 gameState.quoteUsageStats.endingCompatibilityAdjustments++;
               }
             } else {
-              // Fallback to LLM if no quotes found
+              // Fallback to LLM if no quote found
               talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
             }
           } else {
-            // Use LLM based on percentage
+            // Use LLM generation
             talkOption = await this.generateLLMTalkOption(character, gameState, recentSegments);
           }
         } else {
@@ -156,35 +159,38 @@ export class DefaultActionChoiceManager implements ActionChoiceManager {
           );
 
           if (useBookQuote) {
-            // Find dialogue context for current round
-            const dialogueContext = await this.bookQuoteExtractor.findDialogueContext(
-              gameState.currentRound,
-              gameState.totalRounds
-            );
-
-            // Extract character actions
-            const actionQuotes = await this.bookQuoteExtractor.extractCharacterActions(
+            // Use RAG-based quote extraction (NEW APPROACH)
+            const quote = await this.bookQuoteExtractor.extractContextualQuoteWithRAG(
               character,
-              dialogueContext,
-              gameState.targetEnding
+              {
+                recentSegments: recentSegments.map(seg => ({
+                  content: seg.content,
+                  characterName: seg.characterName
+                })),
+                currentRound: gameState.currentRound,
+                totalRounds: gameState.totalRounds,
+                novelTitle: gameState.metadata.novelTitle
+              },
+              gameState.targetEnding,
+              'act'
             );
 
-            if (actionQuotes.length > 0) {
-              // Check ending compatibility for the first quote
+            if (quote) {
+              // Check ending compatibility for the quote
               const compatibilityScore = await this.bookQuoteExtractor.checkEndingCompatibility(
-                actionQuotes[0],
+                quote,
                 gameState.targetEnding
               );
 
               if (compatibilityScore.shouldUse) {
-                actOption = `[Book Quote - ${dialogueContext.sceneDescription}]\n${actionQuotes[0]}`;
+                actOption = `[Book Quote - RAG]\n${quote}`;
               } else {
                 // Fallback to LLM if quote doesn't support ending
                 actOption = await this.generateLLMActOption(character, gameState, recentSegments);
                 gameState.quoteUsageStats.endingCompatibilityAdjustments++;
               }
             } else {
-              // Fallback to LLM if no quotes found
+              // Fallback to LLM if no quote found
               actOption = await this.generateLLMActOption(character, gameState, recentSegments);
             }
           } else {

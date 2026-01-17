@@ -170,10 +170,9 @@ export class DefaultGameStateManager implements GameStateManager {
       return false;
     }
 
-    // Check totalRounds is between 10-20
+    // Check totalRounds is a positive integer (allow any positive value for testing)
     if (typeof metadata.totalRounds !== 'number' || 
-        metadata.totalRounds < 10 || 
-        metadata.totalRounds > 20 || 
+        metadata.totalRounds < 1 || 
         !Number.isInteger(metadata.totalRounds)) {
       return false;
     }

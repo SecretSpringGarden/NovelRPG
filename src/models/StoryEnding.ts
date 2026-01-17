@@ -3,7 +3,7 @@
  */
 export interface StoryEnding {
   id: string;
-  type: 'original' | 'similar' | 'opposite' | 'random';
+  type: 'original' | 'opposite' | 'random';
   description: string;
   targetScore: number; // How many actions should lead toward this ending
 }
@@ -26,7 +26,7 @@ export function validateStoryEnding(ending: any): ending is StoryEnding {
   }
 
   // Check type is valid enum value
-  const validTypes = ['original', 'similar', 'opposite', 'random'];
+  const validTypes = ['original', 'opposite', 'random'];
   if (!validTypes.includes(ending.type)) {
     return false;
   }
@@ -40,10 +40,10 @@ export function validateStoryEnding(ending: any): ending is StoryEnding {
 }
 
 /**
- * Validates an array of story endings ensuring exactly 8 endings with correct distribution
+ * Validates an array of story endings ensuring exactly 3 endings with correct distribution
  */
 export function validateStoryEndingArray(endings: any[]): endings is StoryEnding[] {
-  if (!Array.isArray(endings) || endings.length !== 8) {
+  if (!Array.isArray(endings) || endings.length !== 3) {
     return false;
   }
 
@@ -52,14 +52,13 @@ export function validateStoryEndingArray(endings: any[]): endings is StoryEnding
     return false;
   }
 
-  // Check distribution: 1 original, 3 similar, 1 opposite, 3 random
+  // Check distribution: 1 original, 1 opposite, 1 random
   const typeCounts = endings.reduce((counts, ending) => {
     counts[ending.type] = (counts[ending.type] || 0) + 1;
     return counts;
   }, {} as Record<string, number>);
 
   return typeCounts.original === 1 &&
-         typeCounts.similar === 3 &&
          typeCounts.opposite === 1 &&
-         typeCounts.random === 3;
+         typeCounts.random === 1;
 }

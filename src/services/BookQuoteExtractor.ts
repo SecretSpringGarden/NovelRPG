@@ -2,6 +2,7 @@ import { Character } from '../models/Character';
 import { StoryEnding } from '../models/StoryEnding';
 import { NovelAnalysis } from '../models/GameState';
 import { LLMService } from './LLMService';
+import { AssistantService } from './AssistantService';
 
 /**
  * DialogueContext interface representing a section of the book
@@ -26,6 +27,16 @@ export interface CompatibilityScore {
 }
 
 /**
+ * GameContext interface for providing context to quote selection
+ */
+export interface GameContext {
+  recentSegments: Array<{ content: string; characterName?: string }>;
+  currentRound: number;
+  totalRounds: number;
+  novelTitle: string;
+}
+
+/**
  * BookQuoteExtractor interface for extracting authentic quotes from novels
  * Requirement 12.4: Extract dialogue and narrative text from source novel
  */
@@ -38,6 +49,7 @@ export interface BookQuoteExtractor {
   shouldUseBookQuote(quotePercentage: number, targetEnding: StoryEnding, endingType: string): boolean;
   extractContextualQuotesForRound(characters: Character[], context: DialogueContext, targetEnding?: StoryEnding): Promise<Map<string, { dialogue: string[], actions: string[] }>>;
   expandContextForMissingCharacters(characters: Character[], context: DialogueContext, targetEnding?: StoryEnding): Promise<{ expandedContext: DialogueContext, quotesMap: Map<string, { dialogue: string[], actions: string[] }> }>; // NEW
+  selectContextualQuote(quotes: string[], character: Character, gameContext: GameContext, targetEnding: StoryEnding): Promise<string | null>; // NEW
 }
 
 /**
@@ -48,15 +60,19 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
   private novelText: string;
   private novelAnalysis: NovelAnalysis;
   private llmService: LLMService;
+  private assistantService: AssistantService;
   private dialogueCache: Map<string, string[]>;
   private actionCache: Map<string, string[]>;
+  private quoteCache: Map<string, string | null>; // Cache for RAG-based quote extraction
 
-  constructor(novelText: string, novelAnalysis: NovelAnalysis, llmService: LLMService) {
+  constructor(novelText: string, novelAnalysis: NovelAnalysis, llmService: LLMService, assistantService: AssistantService) {
     this.novelText = novelText;
     this.novelAnalysis = novelAnalysis;
     this.llmService = llmService;
+    this.assistantService = assistantService;
     this.dialogueCache = new Map();
     this.actionCache = new Map();
+    this.quoteCache = new Map();
   }
 
   /**
@@ -77,9 +93,13 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
         return [];
       }
       
+      // Debug: Log character name
+      console.log(`   🔍 Extracting dialogue for: "${character.name}" (length: ${character.name.length})`);
+      
       // Check cache first for performance
       const cacheKey = `${character.id}_${context?.startPosition || 0}_${context?.endPosition || this.novelText.length}`;
       if (this.dialogueCache.has(cacheKey)) {
+        console.log(`   📦 Using cached result`);
         return this.dialogueCache.get(cacheKey)!;
       }
 
@@ -103,7 +123,7 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
         'gi'
       );
 
-      // Pattern 2: "'dialogue,' said Character"
+      // Pattern 2: "'dialogue,' said Character"  
       const pattern2 = new RegExp(
         `["']([^"']{10,200})["'][^.]*?(?:said|replied|asked|exclaimed|whispered|shouted|murmured|answered|continued|added|remarked|observed|declared|stated|announced|cried|muttered|responded)\\s+${this.escapeRegex(character.name)}`,
         'gi'
@@ -118,6 +138,25 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
       // Extract using all patterns with error handling
       let match;
       
+      // Debug: Test if character name appears in text at all
+      const nameCount = (searchText.match(new RegExp(this.escapeRegex(character.name), 'gi')) || []).length;
+      console.log(`   📊 Character name "${character.name}" appears ${nameCount} times in search text`);
+      
+      // Debug: Test if "said [name]" appears
+      const saidPattern = new RegExp(`said\\s+${this.escapeRegex(character.name)}`, 'gi');
+      const saidCount = (searchText.match(saidPattern) || []).length;
+      console.log(`   📊 "said ${character.name}" appears ${saidCount} times`);
+      
+      // Debug: Show a sample of text around "said [name]"
+      const saidMatch = saidPattern.exec(searchText);
+      if (saidMatch) {
+        const sampleStart = Math.max(0, saidMatch.index - 100);
+        const sampleEnd = Math.min(searchText.length, saidMatch.index + 100);
+        const sample = searchText.substring(sampleStart, sampleEnd);
+        console.log(`   📝 Sample text around "said ${character.name}":`);
+        console.log(`      "${sample.replace(/\n/g, ' ')}"`);
+      }
+      
       try {
         while ((match = pattern1.exec(searchText)) !== null) {
           const quote = match[1].trim();
@@ -125,6 +164,7 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
             dialogueQuotes.push(quote);
           }
         }
+        console.log(`   ✓ Pattern 1 found ${dialogueQuotes.length} quotes`);
       } catch (error) {
         console.warn(`⚠️  Error extracting dialogue with pattern 1 for ${character.name}:`, error);
       }
@@ -136,6 +176,7 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
             dialogueQuotes.push(quote);
           }
         }
+        console.log(`   ✓ Pattern 2 found ${dialogueQuotes.length} total quotes`);
       } catch (error) {
         console.warn(`⚠️  Error extracting dialogue with pattern 2 for ${character.name}:`, error);
       }
@@ -147,6 +188,7 @@ export class DefaultBookQuoteExtractor implements BookQuoteExtractor {
             dialogueQuotes.push(quote);
           }
         }
+        console.log(`   ✓ Pattern 3 found ${dialogueQuotes.length} total quotes`);
       } catch (error) {
         console.warn(`⚠️  Error extracting dialogue with pattern 3 for ${character.name}:`, error);
       }
@@ -655,11 +697,6 @@ Respond with ONLY valid JSON in this exact format:
         // This will be further filtered by checkEndingCompatibility
         return randomValue < quotePercentage;
       
-      case 'similar':
-        // For similar endings, book quotes should work well
-        // Use the configured percentage with slight reduction
-        return randomValue < quotePercentage * 0.9;
-      
       default:
         // Unknown ending type, default to configured percentage
         console.warn(`Unknown ending type: ${targetEnding.type}, using default behavior`);
@@ -837,6 +874,278 @@ Respond with ONLY valid JSON in this exact format:
     
     return { expandedContext, quotesMap };
   }
+
+  /**
+   * Extract a contextual quote using RAG (Assistant API) instead of regex
+   * This is the NEW approach that intelligently finds quotes based on game context
+   * 
+   * @param character - The character who will speak/act
+   * @param gameContext - Current game state context (recent story, round info)
+   * @param targetEnding - The ending the story is moving toward
+   * @param actionType - Whether this is dialogue ('talk') or action ('act')
+   * @returns A single contextually appropriate quote, or null if none found
+   */
+  async extractContextualQuoteWithRAG(
+    character: Character,
+    gameContext: GameContext,
+    targetEnding: StoryEnding,
+    actionType: 'talk' | 'act'
+  ): Promise<string | null> {
+    try {
+      // Validate inputs
+      if (!character || !character.name) {
+        console.warn('⚠️  Invalid character provided to extractContextualQuoteWithRAG');
+        return null;
+      }
+
+      if (!gameContext) {
+        console.warn('⚠️  Invalid game context provided to extractContextualQuoteWithRAG');
+        return null;
+      }
+
+      // Check if assistant is available
+      if (!this.novelAnalysis.assistantId) {
+        console.warn('⚠️  No assistant ID available for RAG-based quote extraction');
+        console.log('   Falling back to regex-based extraction');
+        return null;
+      }
+
+      // Check cache first
+      const cacheKey = `${character.id}_${actionType}_${gameContext.currentRound}_${targetEnding.type}`;
+      if (this.quoteCache.has(cacheKey)) {
+        console.log(`   📦 Using cached RAG quote for ${character.name}`);
+        return this.quoteCache.get(cacheKey)!;
+      }
+
+      // Build recent story context
+      const recentStory = gameContext.recentSegments
+        .slice(-3)
+        .map(seg => seg.content)
+        .join('\n\n');
+
+      // Build the query for the Assistant API
+      const actionTypeDescription = actionType === 'talk' 
+        ? 'dialogue (something the character says)'
+        : 'action (something the character does, described in narrative form)';
+
+      const query = `You have access to "${gameContext.novelTitle}" through file search. Find an appropriate quote for this situation:
+
+Character: ${character.name}
+Character Description: ${character.description}
+
+Action Type: ${actionTypeDescription}
+
+Current Story Progress: Round ${gameContext.currentRound} of ${gameContext.totalRounds}
+Target Ending: ${targetEnding.description}
+
+Recent Story Events:
+${recentStory || 'Story is just beginning...'}
+
+Find a quote from the novel where ${character.name} ${actionType === 'talk' ? 'speaks' : 'performs an action'} that:
+1. Is authentic ${actionType === 'talk' ? 'dialogue' : 'narrative description'} from the novel
+2. Fits ${character.name}'s personality and the current situation
+3. Could naturally follow from the recent story events
+4. Moves the story toward the target ending
+5. ${actionType === 'talk' ? 'Is actual spoken dialogue by the character' : 'Describes a physical action or behavior'}
+
+IMPORTANT: 
+- Return ONLY the exact quote text from the novel, nothing else
+- ${actionType === 'talk' ? 'The quote should be dialogue (words spoken by the character)' : 'The quote should be a narrative description of an action'}
+- Do not add any explanation, context, or commentary
+- If no appropriate quote exists, respond with exactly: "NO_QUOTE_FOUND"`;
+
+      console.log(`   🔍 Querying Assistant API for ${actionType} quote for ${character.name}...`);
+
+      // Query the assistant with timeout
+      const timeoutMs = 20000; // 20 seconds for RAG query
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Assistant API query timeout')), timeoutMs);
+      });
+
+      const queryPromise = this.assistantService.queryAssistant(
+        this.novelAnalysis.assistantId,
+        query
+      );
+
+      const response = await Promise.race([queryPromise, timeoutPromise]);
+
+      // Clean up the response
+      const cleanedResponse = response.trim();
+
+      // Check if no quote was found
+      if (cleanedResponse === 'NO_QUOTE_FOUND' || cleanedResponse.length === 0) {
+        console.log(`   ℹ️  No appropriate quote found by RAG for ${character.name}`);
+        this.quoteCache.set(cacheKey, null);
+        return null;
+      }
+
+      // Remove any quotes or formatting that might have been added
+      let quote = cleanedResponse;
+      
+      // Remove surrounding quotes if present
+      if ((quote.startsWith('"') && quote.endsWith('"')) || 
+          (quote.startsWith("'") && quote.endsWith("'"))) {
+        quote = quote.slice(1, -1);
+      }
+
+      // Validate quote length (should be reasonable)
+      if (quote.length < 10 || quote.length > 300) {
+        console.warn(`⚠️  Quote length unusual (${quote.length} chars), may not be valid`);
+        this.quoteCache.set(cacheKey, null);
+        return null;
+      }
+
+      console.log(`   ✅ Found ${actionType} quote via RAG for ${character.name}`);
+      console.log(`      "${quote.substring(0, 60)}${quote.length > 60 ? '...' : ''}"`);
+
+      // Cache the result
+      this.quoteCache.set(cacheKey, quote);
+
+      return quote;
+    } catch (error) {
+      // Handle errors gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`⚠️  Failed to extract quote via RAG: ${errorMessage}`);
+      console.log(`   Will fall back to LLM generation`);
+      
+      // Cache the failure to avoid repeated attempts
+      const cacheKey = `${character.id}_${actionType}_${gameContext.currentRound}_${targetEnding.type}`;
+      this.quoteCache.set(cacheKey, null);
+      
+      return null;
+    }
+  }
+
+  /**
+   * Select the most contextually appropriate quote from a list of candidates
+   * Uses LLM to intelligently choose a quote that moves the story forward
+   * 
+   * @param quotes - Array of candidate quotes extracted from the novel
+   * @param character - The character who will speak/act
+   * @param gameContext - Current game state context (recent story, round info)
+   * @param targetEnding - The ending the story is moving toward
+   * @returns The selected quote, or null if no appropriate quote found
+   */
+  async selectContextualQuote(
+    quotes: string[],
+    character: Character,
+    gameContext: GameContext,
+    targetEnding: StoryEnding
+  ): Promise<string | null> {
+    try {
+      // Validate inputs
+      if (!quotes || quotes.length === 0) {
+        console.log(`ℹ️  No quotes provided for selection`);
+        return null;
+      }
+
+      if (quotes.length === 1) {
+        // Only one quote available, return it directly
+        return quotes[0];
+      }
+
+      if (!character || !character.name) {
+        console.warn('⚠️  Invalid character provided to selectContextualQuote');
+        return null;
+      }
+
+      if (!gameContext) {
+        console.warn('⚠️  Invalid game context provided to selectContextualQuote');
+        return null;
+      }
+
+      // Build recent story context
+      const recentStory = gameContext.recentSegments
+        .slice(-3)
+        .map(seg => seg.content)
+        .join('\n\n');
+
+      // Build prompt for LLM to select the best quote
+      const prompt = `You are helping to select the most appropriate quote from "${gameContext.novelTitle}" for the current story situation.
+
+Character: ${character.name}
+Description: ${character.description}
+
+Current Round: ${gameContext.currentRound} of ${gameContext.totalRounds}
+Target Ending: ${targetEnding.description}
+
+Recent Story:
+${recentStory || 'Story is just beginning...'}
+
+Available Quotes (numbered):
+${quotes.map((quote, index) => `${index + 1}. "${quote}"`).join('\n\n')}
+
+Analyze each quote and select the ONE that:
+1. Best fits ${character.name}'s personality and voice
+2. Naturally follows from the recent story events
+3. Moves the story forward toward the target ending
+4. Feels like a logical next step in the narrative
+5. Creates interesting story progression
+
+Consider:
+- Does the quote's tone match the current story mood?
+- Does it respond to or build on what just happened?
+- Does it advance the plot toward the target ending?
+- Would it feel natural for ${character.name} to say/do this now?
+
+Respond with ONLY valid JSON in this exact format:
+{
+  "selectedIndex": <number 1-${quotes.length}>,
+  "reasoning": "<brief explanation of why this quote is best>"
+}`;
+
+      // Set timeout for LLM call
+      const timeoutMs = 15000; // 15 seconds
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('LLM call timeout')), timeoutMs);
+      });
+
+      const llmPromise = this.llmService.generateContent(prompt, {});
+      const response = await Promise.race([llmPromise, timeoutPromise]);
+
+      // Clean up response - remove markdown code blocks if present
+      let cleanedResponse = response.trim();
+      if (cleanedResponse.startsWith('```json')) {
+        cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanedResponse.startsWith('```')) {
+        cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      cleanedResponse = cleanedResponse.trim();
+
+      // Try to find JSON object in the response if it's embedded in text
+      const jsonObjectMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+      if (jsonObjectMatch && !cleanedResponse.startsWith('{')) {
+        cleanedResponse = jsonObjectMatch[0];
+      }
+
+      const result = JSON.parse(cleanedResponse);
+
+      // Validate the response
+      if (typeof result.selectedIndex !== 'number' || result.selectedIndex < 1 || result.selectedIndex > quotes.length) {
+        throw new Error(`Invalid selectedIndex in response: ${result.selectedIndex}`);
+      }
+
+      if (typeof result.reasoning !== 'string') {
+        throw new Error('Invalid reasoning in response');
+      }
+
+      // Convert 1-based index to 0-based
+      const selectedQuote = quotes[result.selectedIndex - 1];
+      
+      console.log(`✅ Selected quote ${result.selectedIndex}/${quotes.length} for ${character.name}`);
+      console.log(`   Reasoning: ${result.reasoning}`);
+
+      return selectedQuote;
+    } catch (error) {
+      // Handle LLM failures gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`⚠️  Failed to select contextual quote: ${errorMessage}`);
+      console.log(`   Falling back to first available quote`);
+      
+      // Default to first quote on error
+      return quotes.length > 0 ? quotes[0] : null;
+    }
+  }
 }
 
 /**
@@ -845,7 +1154,8 @@ Respond with ONLY valid JSON in this exact format:
 export function createBookQuoteExtractor(
   novelText: string,
   novelAnalysis: NovelAnalysis,
-  llmService: LLMService
+  llmService: LLMService,
+  assistantService: AssistantService
 ): BookQuoteExtractor {
-  return new DefaultBookQuoteExtractor(novelText, novelAnalysis, llmService);
+  return new DefaultBookQuoteExtractor(novelText, novelAnalysis, llmService, assistantService);
 }

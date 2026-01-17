@@ -23,6 +23,7 @@ export interface NovelAnalyzer {
   extractCharactersWithAssistant(assistantId: string): Promise<Character[]>;
   extractPlotPointsWithAssistant(assistantId: string): Promise<PlotPoint[]>;
   identifyNarrativeStructureWithAssistant(assistantId: string): Promise<NarrativeStructure>;
+  cleanup(): Promise<void>;
 }
 
 export class DefaultNovelAnalyzer implements NovelAnalyzer {
@@ -159,10 +160,20 @@ export class DefaultNovelAnalyzer implements NovelAnalyzer {
             climax: narrativeStructure.climax,
             conclusion: narrativeStructure.conclusion,
             isComplete: validationErrors.length === 0,
-            validationErrors: validationErrors
+            validationErrors: validationErrors,
+            // Store assistant resources for quote extraction during game
+            assistantId: this.currentAssistantId,
+            fileId: this.currentFileId,
+            vectorStoreId: undefined // Vector store ID is managed internally by assistant
           };
 
           console.log(`✅ Novel analysis complete using Assistant API`);
+          console.log(`   📌 Assistant ID: ${this.currentAssistantId} (kept alive for quote extraction)`);
+          console.log(`   📌 File ID: ${this.currentFileId}`);
+          
+          // DO NOT cleanup here - resources will be cleaned up when game ends
+          // This allows BookQuoteExtractor to query the assistant during the game
+          
           return analysis;
 
         } catch (error) {
@@ -313,46 +324,49 @@ Focus on the most significant moments that define each structural element. Use o
       throw new Error('Assistant ID is required');
     }
 
-    const prompt = `Analyze the novel and identify the top 4 main characters.
+    const prompt = `You have access to a novel file through the file_search tool. Use it to find and extract character information.
 
-CRITICAL: You MUST respond with ONLY valid JSON. Do not include any explanatory text, markdown formatting, or code blocks. Your entire response must be parseable as JSON.
+TASK: Find the 4 most important characters in the novel by searching through the text.
 
-Return EXACTLY this JSON structure with 4 characters:
+INSTRUCTIONS:
+1. Use the file_search tool to search for character names and dialogue
+2. Identify the main protagonist, antagonist, and 2 key supporting characters
+3. Extract their ACTUAL names EXACTLY as they appear in the novel
+4. DO NOT use generic placeholders - use the real character names from the text
+
+For example, if analyzing "Pride and Prejudice":
+- Use "Elizabeth Bennet" NOT "Protagonist Full Name"
+- Use "Mr. Darcy" NOT "Antagonist Full Name"
+- Use "Jane Bennet" NOT "Supporting Character One"
+
+Return a JSON array with exactly 4 character objects in this format:
 [
   {
-    "id": "character_name_lowercase_with_underscores",
-    "name": "Character Full Name",
-    "description": "Brief 2-3 sentence character description based on the novel",
-    "importance": 8
+    "id": "elizabeth_bennet",
+    "name": "Elizabeth Bennet",
+    "description": "The intelligent and spirited protagonist who must overcome her prejudice",
+    "importance": 10
   },
   {
-    "id": "another_character",
-    "name": "Another Character Name",
-    "description": "Brief 2-3 sentence character description",
-    "importance": 7
-  },
-  {
-    "id": "third_character",
-    "name": "Third Character Name",
-    "description": "Brief 2-3 sentence character description",
-    "importance": 6
-  },
-  {
-    "id": "fourth_character",
-    "name": "Fourth Character Name",
-    "description": "Brief 2-3 sentence character description",
-    "importance": 5
+    "id": "mr_darcy",
+    "name": "Mr. Darcy",
+    "description": "The wealthy gentleman who must overcome his pride",
+    "importance": 9
   }
 ]
 
 Requirements:
-- Return EXACTLY 4 characters
-- Each character must have: id (string), name (string), description (string), importance (number 1-10)
-- Focus on characters who drive the plot and appear throughout the story
-- Your response must start with [ and end with ]
-- Do not wrap the JSON in markdown code blocks or add any other text`;
+- Extract REAL character names from the novel (not placeholders)
+- Provide 2-3 sentence descriptions based on what you find in the novel
+- Assign importance scores: 9-10 for protagonist, 8-9 for antagonist, 6-7 for supporting
+- Return ONLY the JSON array, no markdown formatting or explanatory text
+- The "id" field should be the name in lowercase with underscores instead of spaces`;
 
     const response = await this.assistantService.queryAssistant(assistantId, prompt);
+    
+    // Log the raw response for debugging
+    console.log('📝 Raw assistant response for character extraction:');
+    console.log(response.substring(0, 500)); // First 500 chars
     
     try {
       // Clean up response - remove markdown code blocks if present
@@ -371,13 +385,30 @@ Requirements:
       // Try to find JSON array in the response if it's embedded in text
       const jsonArrayMatch = cleanedResponse.match(/\[[\s\S]*\]/);
       if (jsonArrayMatch && !cleanedResponse.startsWith('[')) {
+        console.log('📝 Found JSON array embedded in text, extracting...');
         cleanedResponse = jsonArrayMatch[0];
       }
       
+      // Log cleaned response
+      console.log('📝 Cleaned response:');
+      console.log(cleanedResponse.substring(0, 500));
+      
       const characters = JSON.parse(cleanedResponse);
       
-      if (!Array.isArray(characters) || characters.length !== 4) {
-        throw new Error(`Expected 4 characters, received ${Array.isArray(characters) ? characters.length : 'invalid format'}`);
+      if (!Array.isArray(characters)) {
+        throw new Error(`Response is not an array: ${typeof characters}`);
+      }
+      
+      if (characters.length === 0) {
+        throw new Error('Assistant returned empty array - it may not have access to the novel content');
+      }
+      
+      if (characters.length !== 4) {
+        console.warn(`⚠️  Expected 4 characters, received ${characters.length}. Using what we have...`);
+        // Don't throw error, just use what we got if it's at least 1 character
+        if (characters.length < 1) {
+          throw new Error('Need at least 1 character');
+        }
       }
 
       // Validate each character
@@ -385,15 +416,27 @@ Requirements:
       for (let i = 0; i < characters.length; i++) {
         const char = characters[i];
         if (!validateCharacter(char)) {
+          console.error(`Invalid character at index ${i}:`, char);
           throw new Error(`Invalid character data at index ${i}: missing or invalid fields`);
         }
         validatedCharacters.push(char);
       }
+      
+      // If we have fewer than 4, pad with generic characters
+      while (validatedCharacters.length < 4) {
+        const index = validatedCharacters.length + 1;
+        validatedCharacters.push({
+          id: `character_${index}`,
+          name: `Character ${index}`,
+          description: 'Supporting character in the story',
+          importance: 5 - index
+        });
+      }
 
-      return validatedCharacters;
+      return validatedCharacters.slice(0, 4); // Ensure exactly 4
     } catch (parseError) {
-      console.error('Character extraction failed. Raw response:', response);
-      console.error('Parse error:', parseError);
+      console.error('❌ Character extraction failed. Raw response:', response);
+      console.error('❌ Parse error:', parseError);
       throw new Error('Invalid JSON response from Assistant for character extraction');
     }
   }

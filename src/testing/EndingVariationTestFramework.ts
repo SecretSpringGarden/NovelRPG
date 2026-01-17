@@ -224,6 +224,19 @@ export class EndingVariationTestFramework {
       throw new Error(`LLM initialization failed: ${errorMessage}`);
     }
     
+    // Initialize LLM service for ending generation
+    try {
+      const { ConfigManager } = require('../config/ConfigManager');
+      const configManager = ConfigManager.getInstance();
+      const llmConfig = configManager.getLLMConfig();
+      await this.llmService.initialize(llmConfig);
+      console.log('✅ LLM service initialized for ending generation');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Failed to initialize LLM service for ending generation: ${errorMessage}`);
+      throw new Error(`LLM initialization failed: ${errorMessage}`);
+    }
+    
     // OPTIMIZATION: Analyze novel ONCE before all games
     let novelAnalysis: any;
     try {
@@ -447,7 +460,8 @@ export class EndingVariationTestFramework {
       0, // 0 human players = all computer players
       this.config.rounds,
       true, // Allow zero human players for testing mode
-      novelAnalysis // Pass pre-analyzed data to skip analysis
+      novelAnalysis, // Pass pre-analyzed data to skip analysis
+      true // Allow custom rounds for testing mode
     );
     
     // Set the target ending for this game
@@ -523,18 +537,9 @@ export class EndingVariationTestFramework {
         
         turnCount++;
         
-        // Create a random player action (talk or act)
-        const actionType: 'talk' | 'act' = Math.random() < 0.5 ? 'talk' : 'act';
-        const playerAction = {
-          type: actionType,
-          timestamp: new Date(),
-          playerId: player.id,
-          contentSource: 'llm_generated' as const,
-          characterName: player.character?.name
-        };
-        
-        // Process the turn
-        await this.gameManager.processPlayerTurn(player.id, playerAction);
+        // Use processPlayerTurnWithChoice() which uses ActionChoiceManager
+        // This will generate options and apply book quote logic
+        await this.gameManager.processPlayerTurnWithChoice(player.id);
         
         // Add small delay between turns to respect rate limits
         if (turnCount % 4 === 0) {
